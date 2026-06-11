@@ -1,5 +1,7 @@
-// Адрес бэкенда. Локально это localhost:8000.
-const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+// Адрес бэкенда.
+// На интернет-версии — жёстко прописываем адрес Render.
+const API_URL = "https://my-tests-app.onrender.com";
+
 
 // Получить все тесты пользователя
 export async function fetchTests(owner) {
