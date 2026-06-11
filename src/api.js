@@ -1,5 +1,5 @@
 // Адрес бэкенда. Локально это localhost:8000.
-const API_URL = "http://127.0.0.1:8000";
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
 // Получить все тесты пользователя
 export async function fetchTests(owner) {
@@ -40,18 +40,18 @@ export async function deleteTest(testId) {
 
 // Обновить существующий тест
 export async function updateTest(testId, test) {
-  const res = await fetch(`${API_URL}/tests/${testId}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      owner: test.owner,
-      title: test.title,
-      type: test.type,
-      questions: test.questions,
-    }),
-  });
-  if (!res.ok) throw new Error("Не удалось обновить тест");
-  return res.json();
+    const res = await fetch(`${API_URL}/tests/${testId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            owner: test.owner,
+            title: test.title,
+            type: test.type,
+            questions: test.questions,
+        }),
+    });
+    if (!res.ok) throw new Error("Не удалось обновить тест");
+    return res.json();
 }
 
 
@@ -69,9 +69,9 @@ export async function submitTest(testId, submission) {
 
 // Удалить одно прохождение (результат) — сам тест остаётся
 export async function deleteSubmission(testId, subId) {
-  const res = await fetch(`${API_URL}/tests/${testId}/submissions/${subId}`, {
-    method: "DELETE",
-  });
-  if (!res.ok) throw new Error("Не удалось удалить результат");
-  return res.json();
+    const res = await fetch(`${API_URL}/tests/${testId}/submissions/${subId}`, {
+        method: "DELETE",
+    });
+    if (!res.ok) throw new Error("Не удалось удалить результат");
+    return res.json();
 }
