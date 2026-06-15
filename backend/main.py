@@ -135,6 +135,7 @@ def add_submission(
     db.refresh(test)
     return _to_out(test)
 
+
 @app.delete("/tests/{test_id}/submissions/{sub_id}")
 def delete_submission(test_id: int, sub_id: int, db: Session = Depends(get_db)):
     test = db.query(models.Test).filter(models.Test.id == test_id).first()
@@ -155,7 +156,6 @@ def delete_submission(test_id: int, sub_id: int, db: Session = Depends(get_db)):
     return _to_out(test)
 
 
-
 # ==================== АВТОРИЗАЦИЯ ====================
 
 # Шаг 1 регистрации: проверяем данные и шлём код на почту
@@ -167,7 +167,6 @@ def register_start(data: schemas.RegisterStart, db: Session = Depends(get_db)):
     if len(data.password) < 6:
         raise HTTPException(status_code=400, detail="Пароль минимум 6 символов")
 
-    # проверяем, не занят ли email или логин подтверждённым пользователем
     existing = db.query(models.User).filter(
         (models.User.email == email) | (models.User.login == login)
     ).first()
@@ -176,12 +175,10 @@ def register_start(data: schemas.RegisterStart, db: Session = Depends(get_db)):
             raise HTTPException(status_code=400, detail="Эта почта уже зарегистрирована")
         raise HTTPException(status_code=400, detail="Этот логин уже занят")
 
-    # если был неподтверждённый пользователь — удаляем, создадим заново
     if existing and not existing.is_verified:
         db.delete(existing)
         db.commit()
 
-    # создаём пользователя (пока не подтверждён)
     user = models.User(
         email=email,
         login=login,
@@ -190,14 +187,12 @@ def register_start(data: schemas.RegisterStart, db: Session = Depends(get_db)):
     )
     db.add(user)
 
-    # генерируем код и сохраняем
     code = generate_code()
     db.add(models.EmailCode(
         email=email, code=code, purpose="register", expires_at=code_expiry(),
     ))
     db.commit()
 
-    # отправляем код (или печатаем в консоль)
     send_code_email(email, code, "register")
     return {"sent": True}
 
@@ -224,7 +219,6 @@ def register_confirm(data: schemas.CodeConfirm, db: Session = Depends(get_db)):
     user.is_verified = True
     db.commit()
 
-    # чистим использованные коды
     db.query(models.EmailCode).filter(
         models.EmailCode.email == email,
         models.EmailCode.purpose == "register",
@@ -258,7 +252,6 @@ def reset_start(data: schemas.ResetStart, db: Session = Depends(get_db)):
     email = data.email.strip().lower()
     user = db.query(models.User).filter(models.User.email == email).first()
 
-    # для безопасности всегда отвечаем "ок", даже если почты нет
     if user and user.is_verified:
         code = generate_code()
         db.add(models.EmailCode(
@@ -310,7 +303,5 @@ def forgot_login(data: schemas.ResetStart, db: Session = Depends(get_db)):
     email = data.email.strip().lower()
     user = db.query(models.User).filter(models.User.email == email).first()
     if user and user.is_verified:
-        # отправляем письмо с логином (используем mailer как простое уведомление)
         send_code_email(email, f"Ваш логин: {user.login}", "register")
     return {"sent": True}
-
