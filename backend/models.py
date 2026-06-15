@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, JSON, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, JSON, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
@@ -36,3 +36,27 @@ class Submission(Base):
     at = Column(String)
 
     test = relationship("Test", back_populates="submissions")
+
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True)
+    login = Column(String, unique=True, index=True)
+    password_hash = Column(String)
+    is_verified = Column(Boolean, default=False)  # подтвердил ли почту
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class EmailCode(Base):
+    __tablename__ = "email_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, index=True)
+    code = Column(String)
+    purpose = Column(String)  # register | reset
+    expires_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+

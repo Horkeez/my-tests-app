@@ -37,3 +37,36 @@ class TestOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ---------- Авторизация ----------
+class RegisterStart(BaseModel):
+    email: str
+    login: str
+    password: str
+
+
+class CodeConfirm(BaseModel):
+    email: str
+    code: str
+
+
+class LoginInput(BaseModel):
+    login: str  # сюда можно ввести логин ИЛИ email
+    password: str
+
+
+class ResetStart(BaseModel):
+    email: str
+
+
+class ResetConfirm(BaseModel):
+    email: str
+    code: str
+    new_password: str
+
+
+class AuthOut(BaseModel):
+    token: str
+    login: str
+    email: str

@@ -1,6 +1,10 @@
 // Адрес бэкенда.
-// На интернет-версии — жёстко прописываем адрес Render.
-const API_URL = "https://my-tests-app.onrender.com";
+// Адрес бэкенда.
+// Локально (npm run dev) — используется localhost.
+// В интернете (собранная версия) — адрес Render.
+const API_URL = import.meta.env.DEV
+    ? "http://127.0.0.1:8000"
+    : "https://my-tests-app.onrender.com";
 
 
 // Получить все тесты пользователя
@@ -75,5 +79,86 @@ export async function deleteSubmission(testId, subId) {
         method: "DELETE",
     });
     if (!res.ok) throw new Error("Не удалось удалить результат");
+    return res.json();
+}
+
+
+// ==================== АВТОРИЗАЦИЯ ====================
+
+// Шаг 1 регистрации — отправить код на почту
+export async function registerStart(email, login, password) {
+    const res = await fetch(`${API_URL}/auth/register/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, login, password }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Ошибка регистрации');
+    }
+    return res.json();
+}
+
+// Шаг 2 регистрации — подтвердить код
+export async function registerConfirm(email, code) {
+    const res = await fetch(`${API_URL}/auth/register/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Неверный код');
+    }
+    return res.json();
+}
+
+// Вход по логину/email + пароль
+export async function loginUser(login, password) {
+    const res = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login, password }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Ошибка входа');
+    }
+    return res.json();
+}
+
+// Восстановление пароля — шаг 1 (отправить код)
+export async function resetStart(email) {
+    const res = await fetch(`${API_URL}/auth/reset/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+    });
+    if (!res.ok) throw new Error('Ошибка');
+    return res.json();
+}
+
+// Восстановление пароля — шаг 2 (новый пароль)
+export async function resetConfirm(email, code, newPassword) {
+    const res = await fetch(`${API_URL}/auth/reset/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code, new_password: newPassword }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Неверный код');
+    }
+    return res.json();
+}
+
+// Напомнить логин по почте
+export async function forgotLogin(email) {
+    const res = await fetch(`${API_URL}/auth/forgot-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+    });
+    if (!res.ok) throw new Error('Ошибка');
     return res.json();
 }

@@ -2,9 +2,15 @@ import React, { useState, useEffect } from 'react';
 import {
   User, Plus, FileText, BarChart3, ClipboardList, Trash2,
   ChevronLeft, Image as ImageIcon, Check, X, CircleDot,
-  CheckSquare, Type, Award, Eye, Send, ListChecks
+  CheckSquare, Type, Award, Eye, Send, ListChecks,
+  LogOut, Share2, Copy, Mail, Lock, KeyRound, ArrowLeft,
+  EyeOff
 } from 'lucide-react';
-import { fetchTests, createTest, deleteTest, submitTest, updateTest, deleteSubmission } from './api';
+import {
+  fetchTests, createTest, deleteTest, submitTest,
+  updateTest, deleteSubmission, fetchTestByCode, registerStart,
+  registerConfirm, loginUser, resetStart, resetConfirm, forgotLogin
+} from './api';
 
 
 // Типы тестов — объявлены в начале, доступны всем компонентам
@@ -16,13 +22,62 @@ const TYPE_LABELS = {
 
 
 export default function TestApp() {
-  const [screen, setScreen] = useState('login');
-  const [username, setUsername] = useState('');
+  // При запуске пытаемся достать сохранённое имя из localStorage
+  const savedUser = localStorage.getItem('username') || '';
+
+  const [screen, setScreen] = useState(savedUser ? 'menu' : 'login');
+  const [username, setUsername] = useState(savedUser);
   const [usernameInput, setUsernameInput] = useState('');
   const [tests, setTests] = useState([]);
   const [activeTest, setActiveTest] = useState(null); // тест, который проходим/смотрим
-  const [editingTest, setEditingTest] = useState(null); // тест, который редактируем (null = создание нового)
-  const [loading, setLoading] = useState(false);
+  const [editingTest, setEditingTest] = useState(null); // тест, который редактируем
+
+  // Сохраняем данные пользователя после успешного входа/регистрации
+  const applyAuth = (data) => {
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('username', data.login);
+    localStorage.setItem('email', data.email);
+    setUsername(data.login);
+    setScreen('menu');
+  };
+
+
+  // Выход из аккаунта: чистим имя и возвращаем на экран входа
+  const handleLogout = () => {
+    localStorage.removeItem('username');
+    localStorage.removeItem('token');
+    localStorage.removeItem('email');
+    setUsername('');
+    setScreen('login');
+  };
+
+
+  // Тест, ссылкой на который сейчас делимся (для модального окна)
+  const [shareTest, setShareTest] = useState(null);
+
+  // Гостевой режим: когда зашли по ссылке ?code=...
+  const [guestTest, setGuestTest] = useState(null);  // загруженный тест
+  const [guestLoading, setGuestLoading] = useState(false);
+  const [guestError, setGuestError] = useState('');
+
+  // При запуске приложения проверяем — есть ли в адресе ?code=...
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (code) {
+      setGuestLoading(true);
+      setScreen('guest');           // отдельный экран для гостя
+      fetchTestByCode(code)
+        .then((test) => {
+          setGuestTest(test);
+          setGuestLoading(false);
+        })
+        .catch(() => {
+          setGuestError('Тест не найден или ссылка устарела');
+          setGuestLoading(false);
+        });
+    }
+  }, []);
 
 
   // Загрузить тесты пользователя с сервера
@@ -40,55 +95,103 @@ export default function TestApp() {
   };
 
 
-  // ----- ЭКРАН ВХОДА -----
-  if (screen === 'login') {
+  // ----- ГОСТЕВОЙ ЭКРАН (заход по ссылке ?code=) -----
+  if (screen === 'guest') {
+    if (guestLoading) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+          <div className="text-gray-500 text-center">
+            <ClipboardList className="w-10 h-10 mx-auto mb-2 animate-pulse text-indigo-400" />
+            Загрузка теста...
+          </div>
+        </div>
+      );
+    }
+    if (guestError) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-lg w-full max-w-sm p-6 text-center">
+            <X className="w-10 h-10 mx-auto mb-2 text-red-400" />
+            <p className="text-gray-700 font-medium mb-4">{guestError}</p>
+            <button
+              onClick={() => {
+                window.history.replaceState({}, '', '/');
+                setScreen(localStorage.getItem('username') ? 'menu' : 'login');
+              }}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg"
+            >
+              На главную
+            </button>
+          </div>
+        </div>
+      );
+    }
+    if (guestTest) {
+      return (
+        <TestTaking
+          key={Date.now()}
+          test={guestTest}
+          onCancel={() => setScreen('guest-done')}
+          onSubmit={async (submission) => {
+            try {
+              await submitTest(guestTest.id, submission);
+            } catch { }
+            setScreen('guest-done');
+          }}
+        />
+      );
+    }
+    return null;
+  }
+
+  // ----- ЭКРАН БЛАГОДАРНОСТИ ПОСЛЕ ПРОХОЖДЕНИЯ ПО ССЫЛКЕ -----
+  if (screen === 'guest-done') {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-indigo-600 to-indigo-800 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-          <div className="flex flex-col items-center mb-6">
-            <div className="bg-indigo-100 rounded-full p-4 mb-3">
-              <ClipboardList className="w-8 h-8 text-indigo-600" />
-            </div>
-            <h1 className="text-xl font-bold text-gray-800">Конструктор тестов</h1>
-            <p className="text-sm text-gray-500 mt-1 text-center">
-              Создавайте тесты, опросы и анкеты
-            </p>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-lg w-full max-w-sm p-6 text-center">
+          <div className="bg-emerald-100 rounded-full p-4 w-fit mx-auto mb-3">
+            <Check className="w-8 h-8 text-emerald-600" />
           </div>
-          <label className="text-sm font-medium text-gray-700 mb-1 block">
-            Имя пользователя
-          </label>
-          <div className="relative mb-4">
-            <User className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" />
-            <input
-              value={usernameInput}
-              onChange={(e) => setUsernameInput(e.target.value)}
-              placeholder="например, teacher_fizika"
-              className="w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-            />
-          </div>
+          <h2 className="text-lg font-bold text-gray-800 mb-1">Спасибо!</h2>
+          <p className="text-sm text-gray-500 mb-5">Ваши ответы отправлены.</p>
+
+          {/* Пройти этот же тест ещё раз */}
+          {guestTest && (
+            <button
+              onClick={() => setScreen('guest')}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg mb-2"
+            >
+              Пройти ещё раз
+            </button>
+          )}
+
+          {/* Создать свой тест — ведёт на вход/регистрацию, НЕ в чужой кабинет */}
           <button
-            onClick={async () => {
-              if (usernameInput.trim()) {
-                const name = usernameInput.trim();
-                setUsername(name);
-                await loadTests(name);
-                setScreen('menu');
-              }
+            onClick={() => {
+              setGuestTest(null);
+              window.history.replaceState({}, '', '/');
+              setScreen('login');
             }}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition"
+            className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2.5 rounded-lg"
           >
-            Войти
+            Создать свой тест
           </button>
         </div>
       </div>
     );
   }
 
+  // ----- ЭКРАН АВТОРИЗАЦИИ (вход / регистрация / сброс пароля) -----
+  if (screen === 'login') {
+    return <AuthScreen onAuth={applyAuth} />;
+  }
+
+
   // ----- ГЛАВНОЕ МЕНЮ -----
   if (screen === 'menu') {
     return (
       <div className="min-h-screen bg-gray-50">
-        <Header username={username} />
+        <Header username={username} onLogout={handleLogout} />
         <div className="max-w-md mx-auto p-4 space-y-3">
           <h2 className="text-lg font-bold text-gray-800 mb-2">Главное меню</h2>
           <MenuCard
@@ -154,7 +257,7 @@ export default function TestApp() {
   if (screen === 'mytests') {
     return (
       <div className="min-h-screen bg-gray-50">
-        <Header username={username} />
+        <Header username={username} onLogout={handleLogout} />
         <div className="max-w-md mx-auto p-4">
           <button
             onClick={() => setScreen('menu')}
@@ -186,11 +289,15 @@ export default function TestApp() {
                       alert('Не удалось удалить тест.');
                     }
                   }}
+                  onShare={() => setShareTest(t)}
                 />
               ))}
             </div>
           )}
         </div>
+        {shareTest && (
+          <ShareModal test={shareTest} onClose={() => setShareTest(null)} />
+        )}
       </div>
     );
   }
@@ -297,7 +404,7 @@ export default function TestApp() {
 
 /* ============ ВСПОМОГАТЕЛЬНЫЕ КОМПОНЕНТЫ ============ */
 
-function Header({ username }) {
+function Header({ username, onLogout }) {
   return (
     <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
       <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
@@ -307,9 +414,21 @@ function Header({ username }) {
           </div>
           <span className="font-bold text-gray-800">Тесты</span>
         </div>
-        <div className="flex items-center gap-1.5 text-sm text-gray-600">
-          <User className="w-4 h-4" />
-          {username}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm text-gray-600">
+            <User className="w-4 h-4" />
+            {username}
+          </div>
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-1 text-sm text-gray-500 hover:text-red-500 transition"
+              title="Выйти"
+            >
+              <LogOut className="w-4 h-4" />
+              Выйти
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -331,7 +450,7 @@ function MenuCard({ icon, color, title, subtitle, onClick }) {
   );
 }
 
-function TestListItem({ test, onTake, onResults, onEdit, onDelete }) {
+function TestListItem({ test, onTake, onResults, onEdit, onDelete, onShare }) {
   const meta = TYPE_LABELS[test.type];
   const Icon = meta.icon;
   return (
@@ -370,6 +489,12 @@ function TestListItem({ test, onTake, onResults, onEdit, onDelete }) {
           <BarChart3 className="w-4 h-4" /> Итоги
         </button>
       </div>
+      <button
+        onClick={onShare}
+        className="w-full mt-2 flex items-center justify-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-sm font-medium py-2 rounded-lg"
+      >
+        <Share2 className="w-4 h-4" /> Поделиться тестом
+      </button>
     </div>
   );
 }
@@ -380,6 +505,8 @@ function TestCreator({ username, editingTest, onCancel, onSave }) {
   const [title, setTitle] = useState(editingTest ? editingTest.title : '');
   const [type, setType] = useState(editingTest ? editingTest.type : 'quiz');
   const [questions, setQuestions] = useState(editingTest ? editingTest.questions : []);
+  const [error, setError] = useState('');
+
 
   const addQuestion = (format) => {
     setQuestions((prev) => [
@@ -439,16 +566,68 @@ function TestCreator({ username, editingTest, onCancel, onSave }) {
       )
     );
 
-  const canSave = title.trim() && questions.length > 0;
+  // Проверяем тест перед сохранением. Возвращает текст ошибки или '' если всё ок.
+  const validateTest = () => {
+    if (!title.trim()) return 'Введите название теста';
+    if (questions.length === 0) return 'Добавьте хотя бы один вопрос';
+
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      const num = i + 1;
+
+      // 1. У каждого вопроса должен быть текст
+      if (!q.text.trim()) {
+        return `Вопрос ${num}: введите текст вопроса`;
+      }
+
+      // 2. Текстовый вопрос
+      if (q.format === 'text') {
+        // если это тест с баллами — нужен правильный ответ
+        if (type === 'quiz' && !q.correctText.trim()) {
+          return `Вопрос ${num}: укажите правильный ответ`;
+        }
+      } else {
+        // 3. Вопросы с вариантами (single / multiple)
+        if (q.options.length < 2) {
+          return `Вопрос ${num}: добавьте минимум 2 варианта ответа`;
+        }
+        // ни один вариант не должен быть пустым
+        const emptyOption = q.options.find((o) => !o.text.trim());
+        if (emptyOption) {
+          return `Вопрос ${num}: заполните все варианты ответа`;
+        }
+        // для теста с баллами — должен быть отмечен хотя бы один правильный
+        if (type === 'quiz') {
+          const hasCorrect = q.options.some((o) => o.correct);
+          if (!hasCorrect) {
+            return `Вопрос ${num}: отметьте правильный ответ галочкой`;
+          }
+        }
+      }
+    }
+    return '';
+  };
 
   const handleSave = () => {
+    const problem = validateTest();
+    if (problem) {
+      setError(problem);
+      // плавно прокручиваем вверх, чтобы пользователь увидел сообщение
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    setError('');
     onSave({
+      id: Date.now(),
       owner: username,
       title: title.trim(),
       type,
       questions,
+      submissions: [],
+      shareCode: Math.random().toString(36).slice(2, 8).toUpperCase(),
     });
   };
+
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -463,6 +642,14 @@ function TestCreator({ username, editingTest, onCancel, onSave }) {
       </div>
 
       <div className="max-w-md mx-auto p-4 space-y-4">
+        {/* Сообщение об ошибке валидации */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 flex items-center gap-2">
+            <X className="w-4 h-4 flex-shrink-0" />
+            {error}
+          </div>
+        )}
+
         {/* Название */}
         <div className="bg-white rounded-xl p-4 shadow-sm">
           <label className="text-sm font-medium text-gray-700 mb-1 block">Название теста</label>
@@ -534,10 +721,9 @@ function TestCreator({ username, editingTest, onCancel, onSave }) {
         <div className="max-w-md mx-auto">
           <button
             onClick={handleSave}
-            disabled={!canSave}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white font-medium py-3 rounded-lg transition"
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 rounded-lg transition"
           >
-            {editingTest ? 'Сохранить изменения' : 'Сохранить тест'} {questions.length > 0 && `(${questions.length} вопр.)`}
+            Сохранить тест {questions.length > 0 && `(${questions.length} вопр.)`}
           </button>
         </div>
       </div>
@@ -1087,3 +1273,411 @@ function plural(n) {
   if (n10 >= 2 && n10 <= 4) return forms[1];
   return forms[2];
 }
+
+
+/* ============ АВТОРИЗАЦИЯ ============ */
+
+function AuthScreen({ onAuth }) {
+  // mode: login | register | code | reset-email | reset-code
+  const [mode, setMode] = useState('login');
+  const [email, setEmail] = useState('');
+  const [login, setLogin] = useState('');
+  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const reset = () => { setError(''); setInfo(''); };
+
+  // --- Вход ---
+  const doLogin = async () => {
+    reset();
+    if (!login.trim() || !password) { setError('Введите логин и пароль'); return; }
+    setLoading(true);
+    try {
+      const data = await loginUser(login.trim(), password);
+      onAuth(data);
+    } catch (e) {
+      setError(e.message);
+    } finally { setLoading(false); }
+  };
+
+  // --- Регистрация: шаг 1 (отправить код) ---
+  const doRegisterStart = async () => {
+    reset();
+    if (!email.trim() || !login.trim() || !password) {
+      setError('Заполните все поля'); return;
+    }
+    if (password.length < 6) { setError('Пароль минимум 6 символов'); return; }
+    setLoading(true);
+    try {
+      await registerStart(email.trim(), login.trim(), password);
+      setInfo('Код отправлен на почту');
+      setMode('code');
+    } catch (e) {
+      setError(e.message);
+    } finally { setLoading(false); }
+  };
+
+  // --- Регистрация: шаг 2 (подтвердить код) ---
+  const doRegisterConfirm = async () => {
+    reset();
+    if (!code.trim()) { setError('Введите код из письма'); return; }
+    setLoading(true);
+    try {
+      const data = await registerConfirm(email.trim(), code.trim());
+      onAuth(data);
+    } catch (e) {
+      setError(e.message);
+    } finally { setLoading(false); }
+  };
+
+  // --- Сброс: шаг 1 (отправить код) ---
+  const doResetStart = async () => {
+    reset();
+    if (!email.trim()) { setError('Введите почту'); return; }
+    setLoading(true);
+    try {
+      await resetStart(email.trim());
+      setInfo('Если почта зарегистрирована, код отправлен');
+      setMode('reset-code');
+    } catch (e) {
+      setError(e.message);
+    } finally { setLoading(false); }
+  };
+
+  // --- Сброс: шаг 2 (новый пароль) ---
+  const doResetConfirm = async () => {
+    reset();
+    if (!code.trim() || !newPassword) { setError('Введите код и новый пароль'); return; }
+    if (newPassword.length < 6) { setError('Пароль минимум 6 символов'); return; }
+    setLoading(true);
+    try {
+      const data = await resetConfirm(email.trim(), code.trim(), newPassword);
+      onAuth(data);
+    } catch (e) {
+      setError(e.message);
+    } finally { setLoading(false); }
+  };
+
+  // --- Напомнить логин ---
+  const doForgotLogin = async () => {
+    reset();
+    if (!email.trim()) { setError('Введите почту'); return; }
+    setLoading(true);
+    try {
+      await forgotLogin(email.trim());
+      setInfo('Если почта зарегистрирована, логин отправлен на неё');
+    } catch (e) {
+      setError(e.message);
+    } finally { setLoading(false); }
+  };
+
+  const inputCls =
+    'w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none';
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-indigo-600 to-indigo-800 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+        {/* Шапка */}
+        <div className="flex flex-col items-center mb-5">
+          <div className="bg-indigo-100 rounded-full p-4 mb-3">
+            <ClipboardList className="w-8 h-8 text-indigo-600" />
+          </div>
+          <h1 className="text-xl font-bold text-gray-800">Конструктор тестов</h1>
+          <p className="text-sm text-gray-500 mt-1 text-center">
+            {mode === 'login' && 'Войдите в свой аккаунт'}
+            {mode === 'register' && 'Создание аккаунта'}
+            {mode === 'code' && 'Подтверждение почты'}
+            {mode === 'reset-email' && 'Восстановление пароля'}
+            {mode === 'reset-code' && 'Новый пароль'}
+          </p>
+        </div>
+
+        {/* Сообщения */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 py-2 mb-3 flex items-center gap-2">
+            <X className="w-4 h-4 flex-shrink-0" /> {error}
+          </div>
+        )}
+        {info && (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-lg px-3 py-2 mb-3 flex items-center gap-2">
+            <Check className="w-4 h-4 flex-shrink-0" /> {info}
+          </div>
+        )}
+
+        {/* ===== ВХОД ===== */}
+        {mode === 'login' && (
+          <>
+            <div className="relative mb-3">
+              <User className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
+              <input value={login} onChange={(e) => setLogin(e.target.value)}
+                placeholder="Логин или почта" className={inputCls} />
+            </div>
+            <div className="mb-1">
+              <PasswordInput
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Пароль"
+                autoComplete="current-password"
+              />
+            </div>
+            <button onClick={() => { reset(); setMode('reset-email'); }}
+              className="text-xs text-indigo-600 mb-4 block ml-auto mt-2">
+              Забыли пароль или логин?
+            </button>
+            <button onClick={doLogin} disabled={loading}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white font-medium py-2.5 rounded-lg mb-3">
+              {loading ? 'Вход...' : 'Войти'}
+            </button>
+            <p className="text-center text-sm text-gray-500">
+              Нет аккаунта?{' '}
+              <button onClick={() => { reset(); setMode('register'); }}
+                className="text-indigo-600 font-medium">Зарегистрироваться</button>
+            </p>
+          </>
+        )}
+
+        {/* ===== РЕГИСТРАЦИЯ ===== */}
+        {mode === 'register' && (
+          <>
+            <div className="relative mb-3">
+              <Mail className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
+              <input value={email} onChange={(e) => setEmail(e.target.value)}
+                placeholder="Электронная почта" className={inputCls} />
+            </div>
+            <div className="relative mb-3">
+              <User className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
+              <input value={login} onChange={(e) => setLogin(e.target.value)}
+                placeholder="Придумайте логин" className={inputCls} />
+            </div>
+            <div className="mb-4">
+              <PasswordInput
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Пароль (минимум 6 символов)"
+                autoComplete="new-password"
+              />
+            </div>
+            <button onClick={doRegisterStart} disabled={loading}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white font-medium py-2.5 rounded-lg mb-3">
+              {loading ? 'Отправка...' : 'Получить код'}
+            </button>
+            <button onClick={() => {
+              reset(); setMode('login');
+            }}
+              className="w-full text-gray-500 text-sm py-1 flex items-center justify-center gap-1">
+              <ArrowLeft className="w-4 h-4" /> Назад ко входу
+            </button>
+          </>
+        )}
+
+        {/* ===== ВВОД КОДА (регистрация) ===== */}
+        {mode === 'code' && (
+          <>
+            <p className="text-sm text-gray-600 mb-3 text-center">
+              Код отправлен на <b>{email}</b>. Введите его ниже.
+            </p>
+            <div className="relative mb-4">
+              <KeyRound className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
+              <input value={code} onChange={(e) => setCode(e.target.value)}
+                placeholder="6-значный код" maxLength={6}
+                className={inputCls + ' tracking-widest text-center'} />
+            </div>
+            <button onClick={doRegisterConfirm} disabled={loading}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white font-medium py-2.5 rounded-lg mb-2">
+              {loading ? 'Проверка...' : 'Подтвердить'}
+            </button>
+            <button onClick={doRegisterStart} disabled={loading}
+              className="w-full text-indigo-600 text-sm py-1">
+              Отправить код повторно
+            </button>
+            <button onClick={() => { reset(); setMode('register'); }}
+              className="w-full text-gray-500 text-sm py-1 flex items-center justify-center gap-1">
+              <ArrowLeft className="w-4 h-4" /> Назад
+            </button>
+          </>
+        )}
+
+        {/* ===== ВОССТАНОВЛЕНИЕ: ввод почты ===== */}
+        {mode === 'reset-email' && (
+          <>
+            <p className="text-sm text-gray-600 mb-3 text-center">
+              Введите почту — пришлём код для смены пароля.
+            </p>
+            <div className="relative mb-4">
+              <Mail className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
+              <input value={email} onChange={(e) => setEmail(e.target.value)}
+                placeholder="Электронная почта" className={inputCls} />
+            </div>
+            <button onClick={doResetStart} disabled={loading}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white font-medium py-2.5 rounded-lg mb-2">
+              {loading ? 'Отправка...' : 'Получить код'}
+            </button>
+            <button onClick={doForgotLogin} disabled={loading}
+              className="w-full text-indigo-600 text-sm py-1">
+              Забыли логин? Напомнить на почту
+            </button>
+            <button onClick={() => { reset(); setMode('login'); }}
+              className="w-full text-gray-500 text-sm py-1 flex items-center justify-center gap-1">
+              <ArrowLeft className="w-4 h-4" /> Назад ко входу
+            </button>
+          </>
+        )}
+
+        {/* ===== ВОССТАНОВЛЕНИЕ: код + новый пароль ===== */}
+        {mode === 'reset-code' && (
+          <>
+            <p className="text-sm text-gray-600 mb-3 text-center">
+              Код отправлен на <b>{email}</b>. Введите код и новый пароль.
+            </p>
+            <div className="relative mb-3">
+              <KeyRound className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
+              <input value={code} onChange={(e) => setCode(e.target.value)}
+                placeholder="Код из письма" maxLength={6}
+                className={inputCls + ' tracking-widest text-center'} />
+            </div>
+            <div className="mb-4">
+              <PasswordInput
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Новый пароль (минимум 6 символов)"
+                autoComplete="new-password"
+              />
+            </div>
+            <button onClick={doResetConfirm} disabled={loading}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white font-medium py-2.5 rounded-lg mb-2">
+              {loading ? 'Сохранение...' : 'Сменить пароль и войти'}
+            </button>
+            <button onClick={() => { reset(); setMode('login'); }}
+              className="w-full text-gray-500 text-sm py-1 flex items-center justify-center gap-1">
+              <ArrowLeft className="w-4 h-4" /> Назад ко входу
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+/* ============ ОКНО "ПОДЕЛИТЬСЯ" ============ */
+
+function ShareModal({ test, onClose }) {
+  const [copied, setCopied] = useState(false);
+
+  // Ссылка на прохождение теста по коду
+  const shareUrl = `${window.location.origin}/?code=${test.shareCode}`;
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // запасной вариант, если clipboard недоступен
+      window.prompt('Скопируйте ссылку вручную:', shareUrl);
+    }
+  };
+
+  // Системное "Поделиться" (на телефоне откроет WhatsApp/Telegram и т.д.)
+  const nativeShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: test.title,
+          text: `Пройдите тест: ${test.title}`,
+          url: shareUrl,
+        });
+      } catch {
+        // пользователь закрыл окно — ничего не делаем
+      }
+    } else {
+      copyLink();
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl w-full max-w-sm p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold text-gray-800">Поделиться тестом</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <p className="text-sm text-gray-500 mb-1">{test.title}</p>
+        <p className="text-xs text-gray-400 mb-3">
+          Код теста: <span className="font-mono font-bold">{test.shareCode}</span>
+        </p>
+
+        {/* Поле со ссылкой */}
+        <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 mb-3">
+          <input
+            readOnly
+            value={shareUrl}
+            className="flex-1 bg-transparent text-sm text-gray-700 outline-none truncate"
+          />
+          <button
+            onClick={copyLink} className="flex-shrink-0 text-indigo-600 hover:text-indigo-800"
+            title="Скопировать"
+          >
+            {copied ? <Check className="w-5 h-5 text-emerald-500" /> : <Copy className="w-5 h-5" />}
+          </button>
+        </div>
+
+        {/* Кнопки действий */}
+        <button
+          onClick={nativeShare}
+          className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg mb-2"
+        >
+          <Share2 className="w-4 h-4" /> Отправить ссылку
+        </button>
+        <button
+          onClick={copyLink}
+          className="w-full flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2.5 rounded-lg"
+        >
+          <Copy className="w-4 h-4" /> {copied ? 'Скопировано!' : 'Скопировать ссылку'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+/* ============ ПОЛЕ ПАРОЛЯ С ГЛАЗИКОМ ============ */
+
+function PasswordInput({ value, onChange, placeholder = 'Пароль', autoComplete = 'current-password' }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <Lock className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" />
+      <input
+        type={show ? 'text' : 'password'}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        className="w-full border border-gray-300 rounded-lg pl-10 pr-10 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+      />
+      <button
+        type="button"
+        onClick={() => setShow((s) => !s)}
+        className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+        title={show ? 'Скрыть пароль' : 'Показать пароль'}
+      >
+        {show ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+      </button>
+    </div>
+  );
+}
+
