@@ -4,7 +4,7 @@ import {
   ChevronLeft, Image as ImageIcon, Check, X, CircleDot,
   CheckSquare, Type, Award, Eye, Send, ListChecks,
   LogOut, Share2, Copy, Mail, Lock, KeyRound, ArrowLeft,
-  EyeOff
+  EyeOff, ArrowLeftRight
 } from 'lucide-react';
 import {
   fetchTests, createTest, deleteTest, submitTest,
@@ -32,6 +32,7 @@ export default function TestApp() {
   const [activeTest, setActiveTest] = useState(null); // тест, который проходим/смотрим
   const [editingTest, setEditingTest] = useState(null); // тест, который редактируем
   const [loading, setLoading] = useState(false);
+  const [resultsSource, setResultsSource] = useState('resultslist');
 
   // Сохраняем данные пользователя после успешного входа/регистрации
   const applyAuth = (data) => {
@@ -283,7 +284,7 @@ export default function TestApp() {
                   key={t.id}
                   test={t}
                   onTake={() => { setActiveTest(t); setScreen('take'); }}
-                  onResults={() => { setActiveTest(t); setScreen('results'); }}
+                  onResults={() => { setResultsSource('mytests'); setActiveTest(t); setScreen('results'); }}
                   onEdit={() => { setEditingTest(t); setScreen('create'); }}
                   onDelete={async () => {
                     try {
@@ -334,7 +335,7 @@ export default function TestApp() {
                 return (
                   <button
                     key={t.id}
-                    onClick={() => { setActiveTest(t); setScreen('results'); }}
+                    onClick={() => { setResultsSource('resultslist'); setActiveTest(t); setScreen('results'); }}
                     className="w-full bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition text-left flex items-center justify-between"
                   >
                     <div className="flex-1">
@@ -389,7 +390,7 @@ export default function TestApp() {
     return (
       <TestResults
         test={fresh}
-        onBack={() => setScreen('resultslist')}
+        onBack={() => setScreen(resultsSource)}
         onDeleteSubmission={async (subId) => {
           try {
             const updated = await deleteSubmission(fresh.id, subId);
@@ -520,11 +521,15 @@ function TestCreator({ username, editingTest, onCancel, onSave }) {
         id: Date.now(),
         text: '',
         image: '',
-        format, // single | multiple | text
-        options: format === 'text' ? [] : [
+        format, // single | multiple | text | match
+        options: (format === 'text' || format === 'match') ? [] : [
           { id: 1, text: '', correct: false },
           { id: 2, text: '', correct: false },
         ],
+        pairs: format === 'match' ? [
+          { id: 1, leftText: '', leftImage: '', rightText: '', rightImage: '' },
+          { id: 2, leftText: '', leftImage: '', rightText: '', rightImage: '' },
+        ] : [],
         correctText: '',
       },
     ]);
@@ -571,6 +576,31 @@ function TestCreator({ username, editingTest, onCancel, onSave }) {
       )
     );
 
+  const addPair = (qid) =>
+    setQuestions((prev) =>
+      prev.map((q) =>
+        q.id === qid
+          ? { ...q, pairs: [...(q.pairs || []), { id: Date.now(), leftText: '', leftImage: '', rightText: '', rightImage: '' }] }
+          : q
+      )
+    );
+
+  const updatePair = (qid, pid, patch) =>
+    setQuestions((prev) =>
+      prev.map((q) =>
+        q.id === qid
+          ? { ...q, pairs: (q.pairs || []).map((p) => (p.id === pid ? { ...p, ...patch } : p)) }
+          : q
+      )
+    );
+
+  const removePair = (qid, pid) =>
+    setQuestions((prev) =>
+      prev.map((q) =>
+        q.id === qid ? { ...q, pairs: (q.pairs || []).filter((p) => p.id !== pid) } : q
+      )
+    );
+
   // Проверяем тест перед сохранением. Возвращает текст ошибки или '' если всё ок.
   const validateTest = () => {
     if (!title.trim()) return 'Введите название теста';
@@ -591,8 +621,23 @@ function TestCreator({ username, editingTest, onCancel, onSave }) {
         if (type === 'quiz' && !q.correctText.trim()) {
           return `Вопрос ${num}: укажите правильный ответ`;
         }
+      } else if (q.format === 'match') {
+        // 3. Вопрос на сопоставление
+        const pairs = q.pairs || [];
+        if (pairs.length < 2) {
+          return `Вопрос ${num}: добавьте минимум 2 пары для сопоставления`;
+        }
+        for (let j = 0; j < pairs.length; j++) {
+          const p = pairs[j];
+          if (!p.leftText.trim() && !p.leftImage.trim()) {
+            return `Вопрос ${num}, пара ${j + 1}: укажите левый элемент (текст или картинку)`;
+          }
+          if (!p.rightText.trim() && !p.rightImage.trim()) {
+            return `Вопрос ${num}, пара ${j + 1}: укажите правый элемент (текст или картинку)`;
+          }
+        }
       } else {
-        // 3. Вопросы с вариантами (single / multiple)
+        // 4. Вопросы с вариантами (single / multiple)
         if (q.options.length < 2) {
           return `Вопрос ${num}: добавьте минимум 2 варианта ответа`;
         }
@@ -707,16 +752,20 @@ function TestCreator({ username, editingTest, onCancel, onSave }) {
             onAddOption={() => addOption(q.id)}
             onUpdateOption={(oid, patch) => updateOption(q.id, oid, patch)}
             onRemoveOption={(oid) => removeOption(q.id, oid)}
+            onAddPair={() => addPair(q.id)}
+            onUpdatePair={(pid, patch) => updatePair(q.id, pid, patch)}
+            onRemovePair={(pid) => removePair(q.id, pid)}
           />
         ))}
 
         {/* Добавить вопрос */}
         <div className="bg-white rounded-xl p-4 shadow-sm">
           <p className="text-sm font-medium text-gray-700 mb-2">Добавить вопрос</p>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <AddBtn icon={<CircleDot className="w-5 h-5" />} label="Один ответ" onClick={() => addQuestion('single')} />
-            <AddBtn icon={<CheckSquare className="w-5 h-5" />} label="Несколько" onClick={() => addQuestion('multiple')} />
-            <AddBtn icon={<Type className="w-5 h-5" />} label="Текст" onClick={() => addQuestion('text')} />
+            <AddBtn icon={<CheckSquare className="w-5 h-5" />} label="Несколько ответов" onClick={() => addQuestion('multiple')} />
+            <AddBtn icon={<Type className="w-5 h-5" />} label="Текстовый ответ" onClick={() => addQuestion('text')} />
+            <AddBtn icon={<ArrowLeftRight className="w-5 h-5" />} label="Сопоставление" onClick={() => addQuestion('match')} />
           </div>
         </div>
       </div>
@@ -752,13 +801,15 @@ const FORMAT_LABELS = {
   single: { label: 'Один ответ', icon: CircleDot },
   multiple: { label: 'Несколько ответов', icon: CheckSquare },
   text: { label: 'Текстовый ответ', icon: Type },
+  match: { label: 'Сопоставление', icon: ArrowLeftRight },
 };
 
 function QuestionEditor({
   index, question, isQuiz, onUpdate, onRemove,
   onAddOption, onUpdateOption, onRemoveOption,
+  onAddPair, onUpdatePair, onRemovePair,
 }) {
-  const meta = FORMAT_LABELS[question.format];
+  const meta = FORMAT_LABELS[question.format] || FORMAT_LABELS.single;
   const Icon = meta.icon;
   return (
     <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
@@ -784,15 +835,83 @@ function QuestionEditor({
         className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-2 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
       />
 
-      {/* Картинка (заглушка) */}
+      {/* Картинка к вопросу */}
       <input
         value={question.image}
         onChange={(e) => onUpdate({ image: e.target.value })}
-        placeholder="Ссылка на картинку (необязательно)"
+        placeholder="Ссылка на картинку к вопросу (необязательно)"
         className="w-full border border-gray-200 rounded-lg px-3 py-1.5 mb-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
       />
 
-      {question.format === 'text' ? (
+      {question.format === 'match' ? (
+        /* ===== СОПОСТАВЛЕНИЕ ===== */
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-1 text-center">
+            <div className="text-xs font-semibold text-indigo-600 bg-indigo-50 rounded-md py-1">Левый элемент</div>
+            <div className="text-xs font-semibold text-emerald-600 bg-emerald-50 rounded-md py-1">Правый элемент</div>
+          </div>
+          {(question.pairs || []).map((pair, pairIdx) => (
+            <div key={pair.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-gray-400">Пара {pairIdx + 1}</span>
+                {(question.pairs || []).length > 2 && (
+                  <button onClick={() => onRemovePair(pair.id)} className="text-gray-300 hover:text-red-500">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <input
+                    value={pair.leftText}
+                    onChange={(e) => onUpdatePair(pair.id, { leftText: e.target.value })}
+                    placeholder="Текст"
+                    className="w-full border border-indigo-200 rounded-md px-2 py-1.5 text-sm focus:ring-1 focus:ring-indigo-500 outline-none bg-white"
+                  />
+                  <input
+                    value={pair.leftImage}
+                    onChange={(e) => onUpdatePair(pair.id, { leftImage: e.target.value })}
+                    placeholder="Ссылка на картинку"
+                    className="w-full border border-gray-200 rounded-md px-2 py-1 text-xs focus:ring-1 focus:ring-indigo-400 outline-none bg-white text-gray-500"
+                  />
+                  {pair.leftImage && (
+                    <img src={pair.leftImage} alt="" className="w-full rounded max-h-16 object-cover bg-gray-100"
+                      onError={(e) => (e.target.style.display = 'none')} />
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <input
+                    value={pair.rightText}
+                    onChange={(e) => onUpdatePair(pair.id, { rightText: e.target.value })}
+                    placeholder="Текст"
+                    className="w-full border border-emerald-200 rounded-md px-2 py-1.5 text-sm focus:ring-1 focus:ring-emerald-500 outline-none bg-white"
+                  />
+                  <input
+                    value={pair.rightImage}
+                    onChange={(e) => onUpdatePair(pair.id, { rightImage: e.target.value })}
+                    placeholder="Ссылка на картинку"
+                    className="w-full border border-gray-200 rounded-md px-2 py-1 text-xs focus:ring-1 focus:ring-emerald-400 outline-none bg-white text-gray-500"
+                  />
+                  {pair.rightImage && (
+                    <img src={pair.rightImage} alt="" className="w-full rounded max-h-16 object-cover bg-gray-100"
+                      onError={(e) => (e.target.style.display = 'none')} />
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+          <button
+            onClick={onAddPair}
+            className="text-sm text-indigo-600 font-medium flex items-center gap-1"
+          >
+            <Plus className="w-4 h-4" /> Добавить пару
+          </button>
+          <p className="text-xs text-gray-400">
+            При прохождении правые элементы будут перемешаны в случайном порядке
+          </p>
+        </div>
+      ) : question.format === 'text' ? (
+        /* ===== ТЕКСТОВЫЙ ОТВЕТ ===== */
         isQuiz ? (
           <div>
             <label className="text-xs font-medium text-gray-600 mb-1 block">
@@ -811,14 +930,14 @@ function QuestionEditor({
           </p>
         )
       ) : (
+        /* ===== ВЫБОР ВАРИАНТОВ (single / multiple) ===== */
         <div className="space-y-2">
           {question.options.map((o) => (
             <div key={o.id} className="flex items-center gap-2">
               {isQuiz && (
                 <button
                   onClick={() => onUpdateOption(o.id, { correct: !o.correct })}
-                  className={`flex-shrink-0 w-6 h-6 rounded-${question.format === 'single' ? 'full' : 'md'} border-2 flex items-center justify-center ${o.correct ? 'bg-emerald-500 border-emerald-500' : 'border-gray-300'
-                    }`}
+                  className={`flex-shrink-0 w-6 h-6 rounded-${question.format === 'single' ? 'full' : 'md'} border-2 flex items-center justify-center ${o.correct ? 'bg-emerald-500 border-emerald-500' : 'border-gray-300'}`}
                   title="Отметить правильным"
                 >
                   {o.correct && <Check className="w-4 h-4 text-white" />}
@@ -907,14 +1026,31 @@ function TestTaking({ test, onCancel, onSubmit }) {
     let answered = 0;
     const detailed = test.questions.map((q) => {
       const a = answers[q.id] || {};
-      const hasAnswer =
-        q.format === 'text' ? !!(a.text && a.text.trim()) : (a.selected || []).length > 0;
+      let hasAnswer = false;
+      let correct = null;
+
+      if (q.format === 'match') {
+        const userMatches = a.matches || {};
+        hasAnswer = Object.keys(userMatches).length > 0;
+        if (test.type === 'quiz') {
+          const pairs = q.pairs || [];
+          correct = pairs.length > 0 && pairs.every((p) => userMatches[p.id] === p.id);
+          if (correct) score++;
+        }
+        if (hasAnswer) answered++;
+        return { qid: q.id, selected: [], text: '', correct, matches: userMatches };
+      }
+
+      if (q.format === 'text') {
+        hasAnswer = !!(a.text && a.text.trim());
+      } else {
+        hasAnswer = (a.selected || []).length > 0;
+      }
       if (hasAnswer) answered++;
 
-      let correct = null;
       if (test.type === 'quiz') {
         if (q.format === 'text') {
-          correct = (a.text || '').trim().toLowerCase() === q.correctText.trim().toLowerCase();
+          correct = (a.text || '').trim().toLowerCase() === (q.correctText || '').trim().toLowerCase();
         } else {
           const correctIds = q.options.filter((o) => o.correct).map((o) => o.id).sort();
           const sel = [...(a.selected || [])].sort();
@@ -922,7 +1058,7 @@ function TestTaking({ test, onCancel, onSubmit }) {
         }
         if (correct) score++;
       }
-      return { qid: q.id, selected: a.selected || [], text: a.text || '', correct };
+      return { qid: q.id, selected: a.selected || [], text: a.text || '', correct, matches: {} };
     });
 
     onSubmit({
@@ -970,7 +1106,27 @@ function TestTaking({ test, onCancel, onSubmit }) {
                 />
               )}
 
-              {q.format === 'text' ? (
+              {q.format === 'match' ? (
+                <MatchTaking
+                  question={q}
+                  matches={a.matches || {}}
+                  onMatch={(leftId, rightId) => {
+                    const current = answers[q.id]?.matches || {};
+                    const updated = { ...current };
+                    // Снимаем если тот же правый элемент был сопоставлен другому левому
+                    Object.keys(updated).forEach((key) => {
+                      if (updated[key] === rightId) delete updated[key];
+                    });
+                    // Переключаем: повторный клик по тому же правому — снимает сопоставление
+                    if (current[leftId] === rightId) {
+                      delete updated[leftId];
+                    } else {
+                      updated[leftId] = rightId;
+                    }
+                    setAnswer(q.id, { matches: updated });
+                  }}
+                />
+              ) : q.format === 'text' ? (
                 <input
                   value={a.text || ''}
                   onChange={(e) => setAnswer(q.id, { text: e.target.value })}
@@ -985,12 +1141,10 @@ function TestTaking({ test, onCancel, onSubmit }) {
                       <button
                         key={o.id}
                         onClick={() => toggleOption(q, o.id)}
-                        className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 text-left transition ${sel ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200'
-                          }`}
+                        className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 text-left transition ${sel ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200'}`}
                       >
                         <div
-                          className={`w-5 h-5 flex-shrink-0 border-2 flex items-center justify-center ${q.format === 'single' ? 'rounded-full' : 'rounded-md'
-                            } ${sel ? 'border-indigo-500 bg-indigo-500' : 'border-gray-300'}`}
+                          className={`w-5 h-5 flex-shrink-0 border-2 flex items-center justify-center ${q.format === 'single' ? 'rounded-full' : 'rounded-md'} ${sel ? 'border-indigo-500 bg-indigo-500' : 'border-gray-300'}`}
                         >
                           {sel && <Check className="w-3.5 h-3.5 text-white" />}
                         </div>
@@ -1018,6 +1172,149 @@ function TestTaking({ test, onCancel, onSubmit }) {
     </div>
   );
 }
+
+/* ============ СОПОСТАВЛЕНИЕ (прохождение) ============ */
+
+function MatchTaking({ question, matches, onMatch }) {
+  const [activeLeftId, setActiveLeftId] = useState(null);
+
+  // Перемешиваем правые элементы один раз при монтировании
+  const [shuffledRights] = useState(() => {
+    const rights = (question.pairs || []).map((p) => ({
+      id: p.id,
+      text: p.rightText,
+      image: p.rightImage,
+    }));
+    for (let i = rights.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [rights[i], rights[j]] = [rights[j], rights[i]];
+    }
+    return rights;
+  });
+
+  const matchedRightIds = new Set(Object.values(matches));
+
+  const getRightForLeft = (leftId) => {
+    const rightId = matches[leftId];
+    return rightId != null ? shuffledRights.find((r) => r.id === rightId) : null;
+  };
+
+  const handleLeftClick = (leftId) => {
+    setActiveLeftId((prev) => (prev === leftId ? null : leftId));
+  };
+
+  const handleRightClick = (rightId) => {
+    if (activeLeftId == null) return;
+    onMatch(activeLeftId, rightId);
+    setActiveLeftId(null);
+  };
+
+  const pairs = question.pairs || [];
+  const allMatched = pairs.length > 0 && pairs.every((p) => matches[p.id] != null);
+
+  return (
+    <div>
+      {/* Подсказка */}
+      <div className={`text-xs text-center py-1.5 px-3 rounded-lg mb-3 ${
+        activeLeftId != null
+          ? 'bg-indigo-50 text-indigo-700 font-medium'
+          : allMatched
+          ? 'bg-emerald-50 text-emerald-700'
+          : 'bg-gray-50 text-gray-500'
+      }`}>
+        {activeLeftId != null
+          ? 'Выберите элемент в правом столбце'
+          : allMatched
+          ? 'Все элементы сопоставлены. Можно изменить.'
+          : 'Нажмите элемент слева, затем выберите совпадение справа'}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        {/* Левый столбец */}
+        <div className="space-y-2">
+          <div className="text-xs font-semibold text-indigo-600 text-center py-1 bg-indigo-50 rounded-md">
+            Левый столбец
+          </div>
+          {pairs.map((pair) => {
+            const matched = getRightForLeft(pair.id);
+            const isActive = activeLeftId === pair.id;
+            return (
+              <button
+                key={pair.id}
+                onClick={() => handleLeftClick(pair.id)}
+                className={`w-full p-2 rounded-lg border-2 text-left text-sm transition ${
+                  isActive
+                    ? 'border-indigo-500 bg-indigo-50 shadow-sm'
+                    : matched
+                    ? 'border-emerald-400 bg-emerald-50'
+                    : 'border-gray-200 hover:border-indigo-300 bg-white'
+                }`}
+              >
+                {pair.leftImage && (
+                  <img
+                    src={pair.leftImage}
+                    alt=""
+                    className="w-full rounded mb-1 max-h-20 object-cover bg-gray-100"
+                    onError={(e) => (e.target.style.display = 'none')}
+                  />
+                )}
+                {pair.leftText && (
+                  <span className="font-medium text-gray-800 text-xs leading-snug block">
+                    {pair.leftText}
+                  </span>
+                )}
+                {matched && (
+                  <div className="mt-1 text-xs text-emerald-700 border-t border-emerald-200 pt-1 leading-snug">
+                    → {matched.text || (matched.image ? '🖼' : '?')}
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Правый столбец */}
+        <div className="space-y-2">
+          <div className="text-xs font-semibold text-emerald-600 text-center py-1 bg-emerald-50 rounded-md">
+            Правый столбец
+          </div>
+          {shuffledRights.map((right) => {
+            const isUsed = matchedRightIds.has(right.id);
+            const isSelectable = activeLeftId != null;
+            return (
+              <button
+                key={right.id}
+                onClick={() => handleRightClick(right.id)}
+                className={`w-full p-2 rounded-lg border-2 text-left text-sm transition ${
+                  isUsed
+                    ? 'border-emerald-400 bg-emerald-50'
+                    : isSelectable
+                    ? 'border-indigo-200 bg-white hover:border-indigo-400 hover:bg-indigo-50'
+                    : 'border-gray-200 bg-white'
+                }`}
+              >
+                {right.image && (
+                  <img
+                    src={right.image}
+                    alt=""
+                    className="w-full rounded mb-1 max-h-20 object-cover bg-gray-100"
+                    onError={(e) => (e.target.style.display = 'none')}
+                  />
+                )}
+                {right.text && (
+                  <span className="font-medium text-gray-800 text-xs leading-snug block">
+                    {right.text}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 /* ============ РЕЗУЛЬТАТЫ ============ */
 
@@ -1157,11 +1454,61 @@ function TestResults({ test, onBack, onDeleteSubmission }) {
 function AnswerReview({ q, idx, detail }) {
   if (!detail) return null;
 
-  // правильность вопроса
   const isCorrect = detail.correct === true;
   const isWrong = detail.correct === false;
 
-  // что выбрал пользователь
+  const indicator = (
+    <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${
+      isCorrect ? 'bg-emerald-500' : isWrong ? 'bg-red-500' : 'bg-gray-300'
+    }`}>
+      {isCorrect ? <Check className="w-3 h-3 text-white" /> : isWrong ? <X className="w-3 h-3 text-white" /> : null}
+    </span>
+  );
+
+  // ===== СОПОСТАВЛЕНИЕ =====
+  if (q.format === 'match') {
+    const userMatches = detail.matches || {};
+    const pairs = q.pairs || [];
+    const correctCount = pairs.filter((p) => userMatches[p.id] === p.id).length;
+    return (
+      <div className="bg-white rounded-lg p-3 border border-gray-100">
+        <div className="flex items-start gap-2 mb-2">
+          {indicator}
+          <p className="text-sm font-medium text-gray-800">
+            {idx + 1}. {q.text || '(вопрос без текста)'}
+          </p>
+        </div>
+        <div className="ml-7 space-y-1">
+          {pairs.map((pair) => {
+            const userRightId = userMatches[pair.id];
+            const matchedPair = pairs.find((p) => p.id === userRightId);
+            const isPairOk = userRightId === pair.id;
+            return (
+              <div key={pair.id} className={`text-xs rounded-md px-2 py-1.5 ${
+                isPairOk ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+              }`}>
+                <span className="font-medium">{pair.leftText || '🖼'}</span>
+                {' → '}
+                <span className="font-medium">
+                  {matchedPair ? (matchedPair.rightText || '🖼') : '(не выбрано)'}
+                </span>
+                {!isPairOk && (
+                  <span className="text-gray-400 ml-1">
+                    (правильно: {pair.rightText || '🖼'})
+                  </span>
+                )}
+              </div>
+            );
+          })}
+          <div className="text-xs text-gray-500 mt-1">
+            Верных пар: {correctCount} из {pairs.length}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== ТЕКСТ / ВАРИАНТЫ =====
   let userAnswer;
   let correctAnswer;
 
@@ -1169,11 +1516,11 @@ function AnswerReview({ q, idx, detail }) {
     userAnswer = detail.text?.trim() || '(пусто)';
     correctAnswer = q.correctText;
   } else {
-    const selectedTexts = q.options
-      .filter((o) => detail.selected.includes(o.id))
+    const selectedTexts = (q.options || [])
+      .filter((o) => (detail.selected || []).includes(o.id))
       .map((o) => o.text || '(пусто)');
     userAnswer = selectedTexts.length ? selectedTexts.join(', ') : '(не отвечено)';
-    correctAnswer = q.options
+    correctAnswer = (q.options || [])
       .filter((o) => o.correct)
       .map((o) => o.text || '(пусто)')
       .join(', ');
@@ -1182,21 +1529,11 @@ function AnswerReview({ q, idx, detail }) {
   return (
     <div className="bg-white rounded-lg p-3 border border-gray-100">
       <div className="flex items-start gap-2 mb-1">
-        <span
-          className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${isCorrect ? 'bg-emerald-500' : isWrong ? 'bg-red-500' : 'bg-gray-300'
-            }`}
-        >
-          {isCorrect ? (
-            <Check className="w-3 h-3 text-white" />
-          ) : isWrong ? (
-            <X className="w-3 h-3 text-white" />
-          ) : null}
-        </span>
+        {indicator}
         <p className="text-sm font-medium text-gray-800">
           {idx + 1}. {q.text || '(вопрос без текста)'}
         </p>
       </div>
-
       <div className="ml-7 space-y-0.5 text-xs">
         <div className={isCorrect ? 'text-emerald-700' : 'text-red-700'}>
           Ответ: <span className="font-medium">{userAnswer}</span>
@@ -1213,6 +1550,8 @@ function AnswerReview({ q, idx, detail }) {
 
 
 function QuestionStats({ q, idx, subs }) {
+  const total = subs.length;
+
   if (q.format === 'text') {
     const texts = subs
       .map((s) => s.detailed.find((d) => d.qid === q.id)?.text)
@@ -1237,16 +1576,46 @@ function QuestionStats({ q, idx, subs }) {
     );
   }
 
-  const total = subs.length;
+  if (q.format === 'match') {
+    const pairs = q.pairs || [];
+    return (
+      <div>
+        <p className="font-medium text-gray-800 text-sm mb-2">
+          {idx + 1}. {q.text}
+        </p>
+        <div className="space-y-1.5">
+          {pairs.map((pair) => {
+            const count = subs.filter((s) => {
+              const detail = s.detailed.find((d) => d.qid === q.id);
+              return detail?.matches?.[pair.id] === pair.id;
+            }).length;
+            const pct = total ? Math.round((count / total) * 100) : 0;
+            return (
+              <div key={pair.id}>
+                <div className="flex justify-between text-xs text-gray-600 mb-0.5">
+                  <span>{pair.leftText || '🖼'} → {pair.rightText || '🖼'}</span>
+                  <span>{count} ({pct}%)</span>
+                </div>
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <p className="font-medium text-gray-800 text-sm mb-2">
         {idx + 1}. {q.text}
       </p>
       <div className="space-y-1.5">
-        {q.options.map((o) => {
+        {(q.options || []).map((o) => {
           const count = subs.filter((s) =>
-            s.detailed.find((d) => d.qid === q.id)?.selected.includes(o.id)
+            s.detailed.find((d) => d.qid === q.id)?.selected?.includes(o.id)
           ).length;
           const pct = total ? Math.round((count / total) * 100) : 0;
           return (
@@ -1256,10 +1625,7 @@ function QuestionStats({ q, idx, subs }) {
                 <span>{count} ({pct}%)</span>
               </div>
               <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-indigo-500 rounded-full transition-all"
-                  style={{ width: `${pct}%` }}
-                />
+                <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
               </div>
             </div>
           );
