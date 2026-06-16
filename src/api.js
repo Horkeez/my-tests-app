@@ -1,9 +1,9 @@
 // Адрес бэкенда.
 // Локально (npm run dev) — используется localhost.
-// В интернете (собранная версия) — адрес Render.
+// В интернете — поддомен api.take-test.ru
 const API_URL = import.meta.env.DEV
     ? "http://127.0.0.1:8000"
-    : "https://my-tests-app.onrender.com";
+    : "https://api.take-test.ru";
 
 // Извлекает читаемое сообщение из ответа API.
 // FastAPI/Pydantic v2 может вернуть detail как строку или массив объектов.

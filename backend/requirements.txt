@@ -4,5 +4,5 @@ sqlalchemy
 pydantic
 passlib[bcrypt]
 email-validator
-fastapi
 bcrypt==4.0.1
+requests
