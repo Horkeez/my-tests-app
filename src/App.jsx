@@ -31,6 +31,7 @@ export default function TestApp() {
   const [tests, setTests] = useState([]);
   const [activeTest, setActiveTest] = useState(null); // тест, который проходим/смотрим
   const [editingTest, setEditingTest] = useState(null); // тест, который редактируем
+  const [loading, setLoading] = useState(false);
 
   // Сохраняем данные пользователя после успешного входа/регистрации
   const applyAuth = (data) => {
@@ -38,6 +39,7 @@ export default function TestApp() {
     localStorage.setItem('username', data.login);
     localStorage.setItem('email', data.email);
     setUsername(data.login);
+    loadTests(data.login);
     setScreen('menu');
   };
 
@@ -76,6 +78,9 @@ export default function TestApp() {
           setGuestError('Тест не найден или ссылка устарела');
           setGuestLoading(false);
         });
+    } else if (savedUser) {
+      // Восстанавливаем тесты из базы при перезагрузке страницы
+      loadTests(savedUser);
     }
   }, []);
 
@@ -1309,6 +1314,16 @@ function AuthScreen({ onAuth }) {
     reset();
     if (!email.trim() || !login.trim() || !password) {
       setError('Заполните все поля'); return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      setError('Введите корректный адрес почты'); return;
+    }
+    if (login.trim().length < 3) {
+      setError('Логин минимум 3 символа'); return;
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(login.trim())) {
+      setError('Логин может содержать только латинские буквы, цифры и знак _'); return;
     }
     if (password.length < 6) { setError('Пароль минимум 6 символов'); return; }
     setLoading(true);

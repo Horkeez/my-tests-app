@@ -164,20 +164,21 @@ def register_start(data: schemas.RegisterStart, db: Session = Depends(get_db)):
     email = data.email.strip().lower()
     login = data.login.strip()
 
-    if len(data.password) < 6:
-        raise HTTPException(status_code=400, detail="Пароль минимум 6 символов")
+    # Проверяем email и логин раздельно, чтобы не пропустить оба конфликта
+    email_user = db.query(models.User).filter(models.User.email == email).first()
+    login_user = db.query(models.User).filter(models.User.login == login).first()
 
-    existing = db.query(models.User).filter(
-        (models.User.email == email) | (models.User.login == login)
-    ).first()
-    if existing and existing.is_verified:
-        if existing.email == email:
-            raise HTTPException(status_code=400, detail="Эта почта уже зарегистрирована")
+    if email_user and email_user.is_verified:
+        raise HTTPException(status_code=400, detail="Эта почта уже зарегистрирована")
+    if login_user and login_user.is_verified:
         raise HTTPException(status_code=400, detail="Этот логин уже занят")
 
-    if existing and not existing.is_verified:
-        db.delete(existing)
-        db.commit()
+    # Удаляем устаревшие неподтверждённые записи, чтобы не нарушать уникальность
+    if email_user:
+        db.delete(email_user)
+    if login_user and login_user is not email_user:
+        db.delete(login_user)
+    db.commit()
 
     user = models.User(
         email=email,

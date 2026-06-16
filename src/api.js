@@ -1,10 +1,22 @@
 // Адрес бэкенда.
-// Адрес бэкенда.
 // Локально (npm run dev) — используется localhost.
 // В интернете (собранная версия) — адрес Render.
 const API_URL = import.meta.env.DEV
     ? "http://127.0.0.1:8000"
     : "https://my-tests-app.onrender.com";
+
+// Извлекает читаемое сообщение из ответа API.
+// FastAPI/Pydantic v2 может вернуть detail как строку или массив объектов.
+function extractError(errData, fallback) {
+    if (!errData) return fallback;
+    if (typeof errData.detail === 'string') return errData.detail;
+    if (Array.isArray(errData.detail) && errData.detail.length > 0) {
+        const msg = errData.detail[0].msg || '';
+        if (msg.toLowerCase().includes('email')) return 'Некорректный формат почты';
+        return msg.replace(/^Value error,\s*/i, '') || fallback;
+    }
+    return fallback;
+}
 
 
 // Получить все тесты пользователя
@@ -94,7 +106,7 @@ export async function registerStart(email, login, password) {
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || 'Ошибка регистрации');
+        throw new Error(extractError(err, 'Ошибка регистрации'));
     }
     return res.json();
 }
@@ -108,7 +120,7 @@ export async function registerConfirm(email, code) {
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || 'Неверный код');
+        throw new Error(extractError(err, 'Неверный код'));
     }
     return res.json();
 }
@@ -122,7 +134,7 @@ export async function loginUser(login, password) {
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || 'Ошибка входа');
+        throw new Error(extractError(err, 'Ошибка входа'));
     }
     return res.json();
 }

@@ -1,5 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Any, List
+import re
 
 
 class SubmissionCreate(BaseModel):
@@ -41,9 +42,28 @@ class TestOut(BaseModel):
 
 # ---------- Авторизация ----------
 class RegisterStart(BaseModel):
-    email: str
+    email: EmailStr
     login: str
     password: str
+
+    @field_validator('login')
+    @classmethod
+    def validate_login(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 3:
+            raise ValueError('Логин минимум 3 символа')
+        if len(v) > 30:
+            raise ValueError('Логин не более 30 символов')
+        if not re.match(r'^[a-zA-Z0-9_]+$', v):
+            raise ValueError('Логин может содержать только латинские буквы, цифры и знак _')
+        return v
+
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if len(v) < 6:
+            raise ValueError('Пароль минимум 6 символов')
+        return v
 
 
 class CodeConfirm(BaseModel):
