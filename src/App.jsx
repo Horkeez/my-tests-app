@@ -1178,6 +1178,8 @@ function TestTaking({ test, onCancel, onSubmit }) {
 function MatchTaking({ question, matches, onMatch }) {
   const [activeLeftId, setActiveLeftId] = useState(null);
 
+  const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+
   // Перемешиваем правые элементы один раз при монтировании
   const [shuffledRights] = useState(() => {
     const rights = (question.pairs || []).map((p) => ({
@@ -1192,9 +1194,13 @@ function MatchTaking({ question, matches, onMatch }) {
     return rights;
   });
 
+  // rightId → буква (A, B, C, ...)
+  const rightLabel = {};
+  shuffledRights.forEach((r, i) => { rightLabel[r.id] = LETTERS[i] || String(i + 1); });
+
   const matchedRightIds = new Set(Object.values(matches));
 
-  const getRightForLeft = (leftId) => {
+  const getMatchedRight = (leftId) => {
     const rightId = matches[leftId];
     return rightId != null ? shuffledRights.find((r) => r.id === rightId) : null;
   };
@@ -1212,37 +1218,41 @@ function MatchTaking({ question, matches, onMatch }) {
   const pairs = question.pairs || [];
   const allMatched = pairs.length > 0 && pairs.every((p) => matches[p.id] != null);
 
+  // Кто из левых сейчас активен — его порядковый номер
+  const activeNum = activeLeftId != null ? pairs.findIndex((p) => p.id === activeLeftId) + 1 : null;
+
   return (
     <div>
       {/* Подсказка */}
-      <div className={`text-xs text-center py-1.5 px-3 rounded-lg mb-3 ${
+      <div className={`text-xs text-center py-1.5 px-3 rounded-lg mb-3 font-medium ${
         activeLeftId != null
-          ? 'bg-indigo-50 text-indigo-700 font-medium'
+          ? 'bg-indigo-50 text-indigo-700'
           : allMatched
           ? 'bg-emerald-50 text-emerald-700'
           : 'bg-gray-50 text-gray-500'
       }`}>
         {activeLeftId != null
-          ? 'Выберите элемент в правом столбце'
+          ? `Выбрано: ${activeNum} — выберите букву в правом столбце`
           : allMatched
-          ? 'Все элементы сопоставлены. Можно изменить.'
-          : 'Нажмите элемент слева, затем выберите совпадение справа'}
+          ? 'Все элементы сопоставлены. Нажмите чтобы изменить.'
+          : 'Нажмите цифру слева, затем букву справа'}
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        {/* Левый столбец */}
+        {/* Левый столбец — цифры */}
         <div className="space-y-2">
           <div className="text-xs font-semibold text-indigo-600 text-center py-1 bg-indigo-50 rounded-md">
             Левый столбец
           </div>
-          {pairs.map((pair) => {
-            const matched = getRightForLeft(pair.id);
+          {pairs.map((pair, idx) => {
+            const matched = getMatchedRight(pair.id);
             const isActive = activeLeftId === pair.id;
+            const num = idx + 1;
             return (
               <button
                 key={pair.id}
                 onClick={() => handleLeftClick(pair.id)}
-                className={`w-full p-2 rounded-lg border-2 text-left text-sm transition ${
+                className={`w-full p-2 rounded-lg border-2 text-left transition ${
                   isActive
                     ? 'border-indigo-500 bg-indigo-50 shadow-sm'
                     : matched
@@ -1250,42 +1260,48 @@ function MatchTaking({ question, matches, onMatch }) {
                     : 'border-gray-200 hover:border-indigo-300 bg-white'
                 }`}
               >
-                {pair.leftImage && (
-                  <img
-                    src={pair.leftImage}
-                    alt=""
-                    className="w-full rounded mb-1 max-h-20 object-cover bg-gray-100"
-                    onError={(e) => (e.target.style.display = 'none')}
-                  />
-                )}
-                {pair.leftText && (
-                  <span className="font-medium text-gray-800 text-xs leading-snug block">
-                    {pair.leftText}
+                <div className="flex items-start gap-1.5">
+                  {/* Порядковый номер */}
+                  <span className={`flex-shrink-0 w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center ${
+                    isActive ? 'bg-indigo-500 text-white' : matched ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-600'
+                  }`}>
+                    {num}
                   </span>
-                )}
-                {matched && (
-                  <div className="mt-1 text-xs text-emerald-700 border-t border-emerald-200 pt-1 leading-snug">
-                    → {matched.text || (matched.image ? '🖼' : '?')}
+                  <div className="flex-1 min-w-0">
+                    {pair.leftImage && (
+                      <img src={pair.leftImage} alt="" className="w-full rounded mb-1 max-h-20 object-cover bg-gray-100"
+                        onError={(e) => (e.target.style.display = 'none')} />
+                    )}
+                    {pair.leftText && (
+                      <span className="font-medium text-gray-800 text-xs leading-snug block">{pair.leftText}</span>
+                    )}
+                    {matched && (
+                      <div className="mt-1 text-xs text-emerald-700 border-t border-emerald-200 pt-1 leading-snug flex items-center gap-1">
+                        <span className="font-bold">→ {rightLabel[matched.id]}</span>
+                        {matched.text && <span className="text-emerald-600">({matched.text})</span>}
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </button>
             );
           })}
         </div>
 
-        {/* Правый столбец */}
+        {/* Правый столбец — буквы */}
         <div className="space-y-2">
           <div className="text-xs font-semibold text-emerald-600 text-center py-1 bg-emerald-50 rounded-md">
             Правый столбец
           </div>
-          {shuffledRights.map((right) => {
+          {shuffledRights.map((right, idx) => {
+            const label = LETTERS[idx] || String(idx + 1);
             const isUsed = matchedRightIds.has(right.id);
             const isSelectable = activeLeftId != null;
             return (
               <button
                 key={right.id}
                 onClick={() => handleRightClick(right.id)}
-                className={`w-full p-2 rounded-lg border-2 text-left text-sm transition ${
+                className={`w-full p-2 rounded-lg border-2 text-left transition ${
                   isUsed
                     ? 'border-emerald-400 bg-emerald-50'
                     : isSelectable
@@ -1293,19 +1309,23 @@ function MatchTaking({ question, matches, onMatch }) {
                     : 'border-gray-200 bg-white'
                 }`}
               >
-                {right.image && (
-                  <img
-                    src={right.image}
-                    alt=""
-                    className="w-full rounded mb-1 max-h-20 object-cover bg-gray-100"
-                    onError={(e) => (e.target.style.display = 'none')}
-                  />
-                )}
-                {right.text && (
-                  <span className="font-medium text-gray-800 text-xs leading-snug block">
-                    {right.text}
+                <div className="flex items-start gap-1.5">
+                  {/* Буква */}
+                  <span className={`flex-shrink-0 w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center ${
+                    isUsed ? 'bg-emerald-500 text-white' : isSelectable ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-600'
+                  }`}>
+                    {label}
                   </span>
-                )}
+                  <div className="flex-1 min-w-0">
+                    {right.image && (
+                      <img src={right.image} alt="" className="w-full rounded mb-1 max-h-20 object-cover bg-gray-100"
+                        onError={(e) => (e.target.style.display = 'none')} />
+                    )}
+                    {right.text && (
+                      <span className="font-medium text-gray-800 text-xs leading-snug block">{right.text}</span>
+                    )}
+                  </div>
+                </div>
               </button>
             );
           })}
