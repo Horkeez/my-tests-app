@@ -38,6 +38,8 @@ def _to_out(test: models.Test) -> dict:
         "type": test.type,
         "questions": test.questions,
         "shareCode": test.share_code,
+        "timeLimit": test.time_limit or 0,
+        "shuffleQuestions": test.shuffle_questions or False,
         "submissions": [
             {
                 "id": s.id,
@@ -99,6 +101,8 @@ def create_test(data: schemas.TestCreate, db: Session = Depends(get_db)):
         type=data.type,
         questions=data.questions,
         share_code=code,
+        time_limit=data.time_limit,
+        shuffle_questions=data.shuffle_questions,
     )
     db.add(test)
     db.commit()
@@ -125,6 +129,8 @@ def update_test(test_id: int, data: schemas.TestCreate, db: Session = Depends(ge
     test.title = data.title
     test.type = data.type
     test.questions = data.questions
+    test.time_limit = data.time_limit
+    test.shuffle_questions = data.shuffle_questions
     db.commit()
     db.refresh(test)
     return _to_out(test)

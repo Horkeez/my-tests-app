@@ -43,6 +43,8 @@ export async function createTest(test) {
             title: test.title,
             type: test.type,
             questions: test.questions,
+            time_limit: test.timeLimit || 0,
+            shuffle_questions: test.shuffleQuestions || false,
         }),
     });
     if (!res.ok) throw new Error("Не удалось создать тест");
@@ -66,6 +68,8 @@ export async function updateTest(testId, test) {
             title: test.title,
             type: test.type,
             questions: test.questions,
+            time_limit: test.timeLimit || 0,
+            shuffle_questions: test.shuffleQuestions || false,
         }),
     });
     if (!res.ok) throw new Error("Не удалось обновить тест");

@@ -13,6 +13,8 @@ class Test(Base):
     type = Column(String)
     questions = Column(JSON)
     share_code = Column(String, unique=True, index=True)
+    time_limit = Column(Integer, default=0)
+    shuffle_questions = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     submissions = relationship(

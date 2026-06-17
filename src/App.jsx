@@ -4,7 +4,7 @@ import {
   ChevronLeft, Image as ImageIcon, Check, X, CircleDot,
   CheckSquare, Type, Award, Eye, Send, ListChecks,
   LogOut, Share2, Copy, Mail, Lock, KeyRound, ArrowLeft,
-  EyeOff, ArrowLeftRight
+  EyeOff, ArrowLeftRight, Clock, Download, Shuffle, AlertCircle
 } from 'lucide-react';
 import {
   fetchTests, createTest, deleteTest, submitTest,
@@ -296,6 +296,22 @@ export default function TestApp() {
                     }
                   }}
                   onShare={() => setShareTest(t)}
+                  onDuplicate={async () => {
+                    try {
+                      const copy = await createTest({
+                        owner: username,
+                        title: t.title + ' (копия)',
+                        type: t.type,
+                        questions: t.questions,
+                        timeLimit: t.timeLimit || 0,
+                        shuffleQuestions: t.shuffleQuestions || false,
+                      });
+                      setTests((prev) => [...prev, copy]);
+                    } catch (e) {
+                      console.error(e);
+                      alert('Не удалось дублировать тест.');
+                    }
+                  }}
                 />
               ))}
             </div>
@@ -456,7 +472,7 @@ function MenuCard({ icon, color, title, subtitle, onClick }) {
   );
 }
 
-function TestListItem({ test, onTake, onResults, onEdit, onDelete, onShare }) {
+function TestListItem({ test, onTake, onResults, onEdit, onDelete, onShare, onDuplicate }) {
   const meta = TYPE_LABELS[test.type];
   const Icon = meta.icon;
   return (
@@ -469,6 +485,7 @@ function TestListItem({ test, onTake, onResults, onEdit, onDelete, onShare }) {
           <h3 className="font-semibold text-gray-800">{test.title}</h3>
           <p className="text-sm text-gray-500">
             {test.questions.length} вопр. · {test.submissions.length} прохожд.
+            {test.timeLimit > 0 && ` · ${test.timeLimit} мин.`}
           </p>
         </div>
         <button onClick={onDelete} className="text-gray-300 hover:text-red-500 p-1">
@@ -495,12 +512,20 @@ function TestListItem({ test, onTake, onResults, onEdit, onDelete, onShare }) {
           <BarChart3 className="w-4 h-4" /> Итоги
         </button>
       </div>
-      <button
-        onClick={onShare}
-        className="w-full mt-2 flex items-center justify-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-sm font-medium py-2 rounded-lg"
-      >
-        <Share2 className="w-4 h-4" /> Поделиться тестом
-      </button>
+      <div className="flex gap-2 mt-2">
+        <button
+          onClick={onShare}
+          className="flex-1 flex items-center justify-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-sm font-medium py-2 rounded-lg"
+        >
+          <Share2 className="w-4 h-4" /> Поделиться
+        </button>
+        <button
+          onClick={onDuplicate}
+          className="flex-1 flex items-center justify-center gap-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-medium py-2 rounded-lg"
+        >
+          <Copy className="w-4 h-4" /> Дублировать
+        </button>
+      </div>
     </div>
   );
 }
@@ -511,6 +536,8 @@ function TestCreator({ username, editingTest, onCancel, onSave }) {
   const [title, setTitle] = useState(editingTest ? editingTest.title : '');
   const [type, setType] = useState(editingTest ? editingTest.type : 'quiz');
   const [questions, setQuestions] = useState(editingTest ? editingTest.questions : []);
+  const [timeLimit, setTimeLimit] = useState(editingTest ? (editingTest.timeLimit || 0) : 0);
+  const [shuffleQuestions, setShuffleQuestions] = useState(editingTest ? (editingTest.shuffleQuestions || false) : false);
   const [error, setError] = useState('');
 
 
@@ -673,6 +700,8 @@ function TestCreator({ username, editingTest, onCancel, onSave }) {
       title: title.trim(),
       type,
       questions,
+      timeLimit,
+      shuffleQuestions,
       submissions: [],
       shareCode: Math.random().toString(36).slice(2, 8).toUpperCase(),
     });
@@ -737,6 +766,38 @@ function TestCreator({ username, editingTest, onCancel, onSave }) {
                 </button>
               );
             })}
+          </div>
+        </div>
+
+        {/* Настройки теста */}
+        <div className="bg-white rounded-xl p-4 shadow-sm space-y-3">
+          <label className="text-sm font-medium text-gray-700 block">Настройки</label>
+          <div className="flex items-center gap-3">
+            <Clock className="w-5 h-5 text-gray-400" />
+            <div className="flex-1">
+              <label className="text-sm text-gray-700">Таймер (минуты)</label>
+              <p className="text-xs text-gray-400">0 = без ограничения</p>
+            </div>
+            <input
+              type="number"
+              min={0}
+              value={timeLimit}
+              onChange={(e) => setTimeLimit(Math.max(0, parseInt(e.target.value) || 0))}
+              className="w-20 border border-gray-300 rounded-lg px-3 py-1.5 text-center focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+          </div>
+          <div className="flex items-center gap-3">
+            <Shuffle className="w-5 h-5 text-gray-400" />
+            <div className="flex-1">
+              <label className="text-sm text-gray-700">Перемешивать вопросы</label>
+              <p className="text-xs text-gray-400">Случайный порядок при прохождении</p>
+            </div>
+            <button
+              onClick={() => setShuffleQuestions(!shuffleQuestions)}
+              className={`w-12 h-7 rounded-full transition-colors ${shuffleQuestions ? 'bg-indigo-600' : 'bg-gray-300'}`}
+            >
+              <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform mx-1 ${shuffleQuestions ? 'translate-x-5' : ''}`} />
+            </button>
           </div>
         </div>
 
@@ -840,8 +901,23 @@ function QuestionEditor({
         value={question.image}
         onChange={(e) => onUpdate({ image: e.target.value })}
         placeholder="Ссылка на картинку к вопросу (необязательно)"
-        className="w-full border border-gray-200 rounded-lg px-3 py-1.5 mb-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+        className="w-full border border-gray-200 rounded-lg px-3 py-1.5 mb-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
       />
+
+      {/* Обязательный вопрос */}
+      <label className="flex items-center gap-2 mb-3 cursor-pointer">
+        <button
+          type="button"
+          onClick={() => onUpdate({ required: !question.required })}
+          className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${
+            question.required ? 'bg-red-500 border-red-500' : 'border-gray-300'
+          }`}
+        >
+          {question.required && <Check className="w-3.5 h-3.5 text-white" />}
+        </button>
+        <span className="text-sm text-gray-600">Обязательный вопрос</span>
+        {question.required && <AlertCircle className="w-3.5 h-3.5 text-red-500" />}
+      </label>
 
       {question.format === 'match' ? (
         /* ===== СОПОСТАВЛЕНИЕ ===== */
@@ -978,7 +1054,47 @@ function QuestionEditor({
 function TestTaking({ test, onCancel, onSubmit }) {
   const [name, setName] = useState('');
   const [started, setStarted] = useState(false);
-  const [answers, setAnswers] = useState({}); // qid -> {selected:[], text:''}
+  const [answers, setAnswers] = useState({});
+  const [timeLeft, setTimeLeft] = useState(null);
+  const [requiredError, setRequiredError] = useState('');
+
+  const [displayQuestions] = useState(() => {
+    const qs = [...test.questions];
+    if (test.shuffleQuestions) {
+      for (let i = qs.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [qs[i], qs[j]] = [qs[j], qs[i]];
+      }
+    }
+    return qs;
+  });
+
+  useEffect(() => {
+    if (!started || !test.timeLimit || test.timeLimit <= 0) return;
+    setTimeLeft(test.timeLimit * 60);
+  }, [started, test.timeLimit]);
+
+  useEffect(() => {
+    if (timeLeft === null || timeLeft <= 0) return;
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [timeLeft !== null]);
+
+  const autoSubmitRef = React.useRef(false);
+  useEffect(() => {
+    if (timeLeft === 0 && started && !autoSubmitRef.current) {
+      autoSubmitRef.current = true;
+      doSubmit(true);
+    }
+  }, [timeLeft]);
 
   const setAnswer = (qid, patch) =>
     setAnswers((prev) => ({ ...prev, [qid]: { ...prev[qid], ...patch } }));
@@ -994,12 +1110,29 @@ function TestTaking({ test, onCancel, onSubmit }) {
     }
   };
 
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
   if (!started) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-lg w-full max-w-sm p-6">
           <h2 className="text-lg font-bold text-gray-800 mb-1">{test.title}</h2>
-          <p className="text-sm text-gray-500 mb-4">{test.questions.length} вопросов</p>
+          <p className="text-sm text-gray-500 mb-1">{test.questions.length} вопросов</p>
+          {test.timeLimit > 0 && (
+            <p className="text-sm text-amber-600 flex items-center gap-1 mb-1">
+              <Clock className="w-4 h-4" /> Ограничение: {test.timeLimit} мин.
+            </p>
+          )}
+          {test.shuffleQuestions && (
+            <p className="text-xs text-gray-400 mb-1 flex items-center gap-1">
+              <Shuffle className="w-3 h-3" /> Вопросы будут перемешаны
+            </p>
+          )}
+          <div className="mb-4" />
           <label className="text-sm font-medium text-gray-700 mb-1 block">Ваше имя</label>
           <input
             value={name}
@@ -1021,7 +1154,24 @@ function TestTaking({ test, onCancel, onSubmit }) {
     );
   }
 
-  const handleSubmit = () => {
+  const doSubmit = (force = false) => {
+    if (!force) {
+      const unanswered = displayQuestions.filter((q) => {
+        if (!q.required) return false;
+        const a = answers[q.id] || {};
+        if (q.format === 'match') return Object.keys(a.matches || {}).length === 0;
+        if (q.format === 'text') return !(a.text && a.text.trim());
+        return (a.selected || []).length === 0;
+      });
+      if (unanswered.length > 0) {
+        const idx = displayQuestions.indexOf(unanswered[0]) + 1;
+        setRequiredError(`Ответьте на обязательный вопрос ${idx}`);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+    }
+    setRequiredError('');
+
     let score = 0;
     let answered = 0;
     const detailed = test.questions.map((q) => {
@@ -1081,12 +1231,23 @@ function TestTaking({ test, onCancel, onSubmit }) {
             <ChevronLeft className="w-5 h-5" /> Выйти
           </button>
           <span className="font-bold text-gray-800 truncate px-2">{test.title}</span>
-          <span className="w-12" />
+          {timeLeft !== null ? (
+            <span className={`text-sm font-mono font-bold flex items-center gap-1 ${timeLeft <= 60 ? 'text-red-600 animate-pulse' : timeLeft <= 300 ? 'text-amber-600' : 'text-gray-600'}`}>
+              <Clock className="w-4 h-4" /> {formatTime(timeLeft)}
+            </span>
+          ) : (
+            <span className="w-12" />
+          )}
         </div>
       </div>
 
       <div className="max-w-md mx-auto p-4 space-y-4">
-        {test.questions.map((q, idx) => {
+        {requiredError && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" /> {requiredError}
+          </div>
+        )}
+        {displayQuestions.map((q, idx) => {
           const a = answers[q.id] || {};
           return (
             <div key={q.id} className="bg-white rounded-xl p-4 shadow-sm">
@@ -1094,7 +1255,10 @@ function TestTaking({ test, onCancel, onSubmit }) {
                 <span className="bg-indigo-600 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0">
                   {idx + 1}
                 </span>
-                <p className="font-medium text-gray-800">{q.text || '(вопрос без текста)'}</p>
+                <p className="font-medium text-gray-800">
+                  {q.text || '(вопрос без текста)'}
+                  {q.required && <span className="text-red-500 ml-1">*</span>}
+                </p>
               </div>
 
               {q.image && (
@@ -1162,7 +1326,7 @@ function TestTaking({ test, onCancel, onSubmit }) {
       <div className="fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 p-3">
         <div className="max-w-md mx-auto">
           <button
-            onClick={handleSubmit}
+            onClick={() => doSubmit(false)}
             className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 rounded-lg flex items-center justify-center gap-2"
           >
             <Send className="w-4 h-4" /> Отправить ответы
@@ -1340,13 +1504,70 @@ function MatchTaking({ question, matches, onMatch }) {
 
 function TestResults({ test, onBack, onDeleteSubmission }) {
   const subs = test.submissions;
-  const [openSub, setOpenSub] = useState(null); // открытое прохождение (для разбора)
+  const [openSub, setOpenSub] = useState(null);
 
-  // средний балл для теста с баллами
   const avgScore =
     test.type === 'quiz' && subs.length
       ? (subs.reduce((sum, s) => sum + s.score, 0) / subs.length).toFixed(1)
       : null;
+
+  const exportCSV = () => {
+    if (subs.length === 0) return;
+    const sep = ';';
+    const headers = ['Имя', 'Дата'];
+    if (test.type === 'quiz') {
+      headers.push('Баллы', 'Всего', 'Отвечено', 'Пропущено');
+    } else {
+      headers.push('Отвечено', 'Пропущено');
+    }
+    test.questions.forEach((q, i) => headers.push(`В${i + 1}: ${q.text}`));
+
+    const rows = subs.map((s) => {
+      const row = [s.name, s.at];
+      if (test.type === 'quiz') {
+        row.push(s.score, s.total, s.answered, s.skipped);
+      } else {
+        row.push(s.answered, s.skipped);
+      }
+      test.questions.forEach((q) => {
+        const d = (s.detailed || []).find((x) => x.qid === q.id);
+        if (!d) { row.push(''); return; }
+        if (q.format === 'text') {
+          row.push(d.text || '');
+        } else if (q.format === 'match') {
+          const pairs = q.pairs || [];
+          const parts = pairs.map((p) => {
+            const matchedPair = pairs.find((pp) => pp.id === (d.matches || {})[p.id]);
+            return `${p.leftText}→${matchedPair ? matchedPair.rightText : '?'}`;
+          });
+          row.push(parts.join(', '));
+        } else {
+          const selected = (q.options || [])
+            .filter((o) => (d.selected || []).includes(o.id))
+            .map((o) => o.text);
+          row.push(selected.join(', '));
+        }
+      });
+      return row;
+    });
+
+    const escape = (v) => {
+      const str = String(v ?? '');
+      if (str.includes(sep) || str.includes('"') || str.includes('\n')) {
+        return '"' + str.replace(/"/g, '""') + '"';
+      }
+      return str;
+    };
+
+    const csv = '﻿' + [headers, ...rows].map((r) => r.map(escape).join(sep)).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${test.title} - результаты.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 pb-8">
@@ -1385,6 +1606,15 @@ function TestResults({ test, onBack, onDeleteSubmission }) {
               </div>
             )}
           </div>
+
+          {subs.length > 0 && (
+            <button
+              onClick={exportCSV}
+              className="w-full mt-3 flex items-center justify-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-sm font-medium py-2.5 rounded-lg transition"
+            >
+              <Download className="w-4 h-4" /> Экспорт в Excel (CSV)
+            </button>
+          )}
         </div>
 
         {subs.length === 0 ? (
