@@ -4,8 +4,11 @@ import {
   ChevronLeft, Image as ImageIcon, Check, X, CircleDot,
   CheckSquare, Type, Award, Eye, Send, ListChecks,
   LogOut, Share2, Copy, Mail, Lock, KeyRound, ArrowLeft,
-  EyeOff, ArrowLeftRight, Clock, Download, Shuffle, AlertCircle
+  EyeOff, ArrowLeftRight, Clock, Download, Shuffle, AlertCircle,
+  GripVertical, ChevronUp, ChevronDown, FolderOpen, FolderPlus,
+  QrCode, Moon, Sun, Upload
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   fetchTests, createTest, deleteTest, submitTest,
   updateTest, deleteSubmission, fetchTestByCode, registerStart,
@@ -33,6 +36,14 @@ export default function TestApp() {
   const [editingTest, setEditingTest] = useState(null); // тест, который редактируем
   const [loading, setLoading] = useState(false);
   const [resultsSource, setResultsSource] = useState('resultslist');
+  const [activeFolder, setActiveFolder] = useState('');
+
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true');
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode);
+    localStorage.setItem('darkMode', darkMode);
+  }, [darkMode]);
 
   // Сохраняем данные пользователя после успешного входа/регистрации
   const applyAuth = (data) => {
@@ -105,8 +116,8 @@ export default function TestApp() {
   if (screen === 'guest') {
     if (guestLoading) {
       return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-          <div className="text-gray-500 text-center">
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
+          <div className="text-gray-500 dark:text-gray-400 text-center">
             <ClipboardList className="w-10 h-10 mx-auto mb-2 animate-pulse text-indigo-400" />
             Загрузка теста...
           </div>
@@ -115,10 +126,10 @@ export default function TestApp() {
     }
     if (guestError) {
       return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-lg w-full max-w-sm p-6 text-center">
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg w-full max-w-sm p-6 text-center">
             <X className="w-10 h-10 mx-auto mb-2 text-red-400" />
-            <p className="text-gray-700 font-medium mb-4">{guestError}</p>
+            <p className="text-gray-700 dark:text-gray-200 font-medium mb-4">{guestError}</p>
             <button
               onClick={() => {
                 window.history.replaceState({}, '', '/');
@@ -153,13 +164,13 @@ export default function TestApp() {
   // ----- ЭКРАН БЛАГОДАРНОСТИ ПОСЛЕ ПРОХОЖДЕНИЯ ПО ССЫЛКЕ -----
   if (screen === 'guest-done') {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-lg w-full max-w-sm p-6 text-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg w-full max-w-sm p-6 text-center">
           <div className="bg-emerald-100 rounded-full p-4 w-fit mx-auto mb-3">
             <Check className="w-8 h-8 text-emerald-600" />
           </div>
-          <h2 className="text-lg font-bold text-gray-800 mb-1">Спасибо!</h2>
-          <p className="text-sm text-gray-500 mb-5">Ваши ответы отправлены.</p>
+          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-1">Спасибо!</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Ваши ответы отправлены.</p>
 
           {/* Пройти этот же тест ещё раз */}
           {guestTest && (
@@ -196,10 +207,10 @@ export default function TestApp() {
   // ----- ГЛАВНОЕ МЕНЮ -----
   if (screen === 'menu') {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <Header username={username} onLogout={handleLogout} />
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Header username={username} onLogout={handleLogout} darkMode={darkMode} onToggleDark={() => setDarkMode(!darkMode)} />
         <div className="max-w-md mx-auto p-4 space-y-3">
-          <h2 className="text-lg font-bold text-gray-800 mb-2">Главное меню</h2>
+          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-2">Главное меню</h2>
           <MenuCard
             icon={<Plus className="w-6 h-6 text-white" />}
             color="bg-indigo-600"
@@ -262,8 +273,8 @@ export default function TestApp() {
   // ----- МОИ ТЕСТЫ -----
   if (screen === 'mytests') {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <Header username={username} onLogout={handleLogout} />
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Header username={username} onLogout={handleLogout} darkMode={darkMode} onToggleDark={() => setDarkMode(!darkMode)} />
         <div className="max-w-md mx-auto p-4">
           <button
             onClick={() => setScreen('menu')}
@@ -271,15 +282,36 @@ export default function TestApp() {
           >
             <ChevronLeft className="w-4 h-4" /> Назад
           </button>
-          <h2 className="text-lg font-bold text-gray-800 mb-3">Мои тесты</h2>
+          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-3">Мои тесты</h2>
+          {(() => {
+            const folders = [...new Set(tests.map(t => t.folder || '').filter(Boolean))];
+            if (folders.length === 0) return null;
+            return (
+              <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+                <button
+                  onClick={() => setActiveFolder('')}
+                  className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${!activeFolder ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}
+                >Все</button>
+                {folders.map(f => (
+                  <button
+                    key={f}
+                    onClick={() => setActiveFolder(f)}
+                    className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap flex items-center gap-1 ${activeFolder === f ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}
+                  >
+                    <FolderOpen className="w-3 h-3" /> {f}
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
           {tests.length === 0 ? (
-            <div className="bg-white rounded-xl p-8 text-center text-gray-400">
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-8 text-center text-gray-400">
               <FileText className="w-10 h-10 mx-auto mb-2 opacity-50" />
               Пока нет тестов.<br />Создайте первый!
             </div>
           ) : (
             <div className="space-y-3">
-              {tests.map((t) => (
+              {tests.filter(t => !activeFolder || (t.folder || '') === activeFolder).map((t) => (
                 <TestListItem
                   key={t.id}
                   test={t}
@@ -305,6 +337,7 @@ export default function TestApp() {
                         questions: t.questions,
                         timeLimit: t.timeLimit || 0,
                         shuffleQuestions: t.shuffleQuestions || false,
+                        folder: t.folder || '',
                       });
                       setTests((prev) => [...prev, copy]);
                     } catch (e) {
@@ -328,8 +361,8 @@ export default function TestApp() {
   // ----- СПИСОК РЕЗУЛЬТАТОВ (отдельный раздел) -----
   if (screen === 'resultslist') {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <Header username={username} />
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Header username={username} darkMode={darkMode} onToggleDark={() => setDarkMode(!darkMode)} />
         <div className="max-w-md mx-auto p-4">
           <button
             onClick={() => setScreen('menu')}
@@ -337,9 +370,9 @@ export default function TestApp() {
           >
             <ChevronLeft className="w-4 h-4" /> Назад
           </button>
-          <h2 className="text-lg font-bold text-gray-800 mb-3">Результаты тестов</h2>
+          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-3">Результаты тестов</h2>
           {tests.length === 0 ? (
-            <div className="bg-white rounded-xl p-8 text-center text-gray-400">
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-8 text-center text-gray-400">
               <BarChart3 className="w-10 h-10 mx-auto mb-2 opacity-50" />
               Пока нет тестов.<br />Сначала создайте тест.
             </div>
@@ -352,14 +385,14 @@ export default function TestApp() {
                   <button
                     key={t.id}
                     onClick={() => { setResultsSource('resultslist'); setActiveTest(t); setScreen('results'); }}
-                    className="w-full bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition text-left flex items-center justify-between"
+                    className="w-full bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm hover:shadow-md transition text-left flex items-center justify-between"
                   >
                     <div className="flex-1">
                       <div className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${meta.color} mb-1.5`}>
                         <Icon className="w-3 h-3" /> {meta.label}
                       </div>
-                      <h3 className="font-semibold text-gray-800">{t.title}</h3>
-                      <p className="text-sm text-gray-500">
+                      <h3 className="font-semibold text-gray-800 dark:text-gray-100">{t.title}</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
                         {t.submissions.length} {t.type === 'quiz' ? 'прохожд.' : 'опрошено'}
                       </p>
                     </div>
@@ -426,21 +459,30 @@ export default function TestApp() {
 
 /* ============ ВСПОМОГАТЕЛЬНЫЕ КОМПОНЕНТЫ ============ */
 
-function Header({ username, onLogout }) {
+function Header({ username, onLogout, darkMode, onToggleDark }) {
   return (
-    <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+    <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
       <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="bg-indigo-100 rounded-lg p-1.5">
             <ClipboardList className="w-5 h-5 text-indigo-600" />
           </div>
-          <span className="font-bold text-gray-800">Тесты</span>
+          <span className="font-bold text-gray-800 dark:text-gray-100">Тесты</span>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-sm text-gray-600">
+          <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300">
             <User className="w-4 h-4" />
             {username}
           </div>
+          {onToggleDark && (
+            <button
+              onClick={onToggleDark}
+              className="text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition p-1"
+              title={darkMode ? 'Светлая тема' : 'Тёмная тема'}
+            >
+              {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+          )}
           {onLogout && (
             <button
               onClick={onLogout}
@@ -461,12 +503,12 @@ function MenuCard({ icon, color, title, subtitle, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="w-full bg-white rounded-xl p-4 flex items-center gap-4 shadow-sm hover:shadow-md transition text-left"
+      className="w-full bg-white dark:bg-gray-800 rounded-xl p-4 flex items-center gap-4 shadow-sm hover:shadow-md transition text-left"
     >
       <div className={`${color} rounded-xl p-3`}>{icon}</div>
       <div>
-        <div className="font-semibold text-gray-800">{title}</div>
-        <div className="text-sm text-gray-500">{subtitle}</div>
+        <div className="font-semibold text-gray-800 dark:text-gray-100">{title}</div>
+        <div className="text-sm text-gray-500 dark:text-gray-400">{subtitle}</div>
       </div>
     </button>
   );
@@ -476,14 +518,14 @@ function TestListItem({ test, onTake, onResults, onEdit, onDelete, onShare, onDu
   const meta = TYPE_LABELS[test.type];
   const Icon = meta.icon;
   return (
-    <div className="bg-white rounded-xl p-4 shadow-sm">
+    <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <div className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${meta.color} mb-1.5`}>
             <Icon className="w-3 h-3" /> {meta.label}
           </div>
-          <h3 className="font-semibold text-gray-800">{test.title}</h3>
-          <p className="text-sm text-gray-500">
+          <h3 className="font-semibold text-gray-800 dark:text-gray-100">{test.title}</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
             {test.questions.length} вопр. · {test.submissions.length} прохожд.
             {test.timeLimit > 0 && ` · ${test.timeLimit} мин.`}
           </p>
@@ -538,10 +580,32 @@ function TestCreator({ username, editingTest, onCancel, onSave }) {
   const [questions, setQuestions] = useState(editingTest ? editingTest.questions : []);
   const [timeLimit, setTimeLimit] = useState(editingTest ? (editingTest.timeLimit || 0) : 0);
   const [shuffleQuestions, setShuffleQuestions] = useState(editingTest ? (editingTest.shuffleQuestions || false) : false);
+  const [folder, setFolder] = useState(editingTest ? (editingTest.folder || '') : '');
   const [error, setError] = useState('');
 
 
   const addQuestion = (format) => {
+    if (format === 'order') {
+      setQuestions((prev) => [
+        ...prev,
+        {
+          id: Date.now(),
+          text: '',
+          image: '',
+          format: 'order',
+          options: [],
+          pairs: [],
+          correctText: '',
+          required: false,
+          orderItems: [
+            { id: 1, text: '' },
+            { id: 2, text: '' },
+            { id: 3, text: '' },
+          ],
+        },
+      ]);
+      return;
+    }
     setQuestions((prev) => [
       ...prev,
       {
@@ -625,6 +689,33 @@ function TestCreator({ username, editingTest, onCancel, onSave }) {
     setQuestions((prev) =>
       prev.map((q) =>
         q.id === qid ? { ...q, pairs: (q.pairs || []).filter((p) => p.id !== pid) } : q
+      )
+    );
+
+  const addOrderItem = (qid) =>
+    setQuestions((prev) =>
+      prev.map((q) =>
+        q.id === qid
+          ? { ...q, orderItems: [...(q.orderItems || []), { id: Date.now(), text: '' }] }
+          : q
+      )
+    );
+
+  const updateOrderItem = (qid, itemId, text) =>
+    setQuestions((prev) =>
+      prev.map((q) =>
+        q.id === qid
+          ? { ...q, orderItems: (q.orderItems || []).map((item) => item.id === itemId ? { ...item, text } : item) }
+          : q
+      )
+    );
+
+  const removeOrderItem = (qid, itemId) =>
+    setQuestions((prev) =>
+      prev.map((q) =>
+        q.id === qid
+          ? { ...q, orderItems: (q.orderItems || []).filter((item) => item.id !== itemId) }
+          : q
       )
     );
 
