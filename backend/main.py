@@ -1,6 +1,6 @@
 import secrets
 from datetime import datetime
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
@@ -9,7 +9,7 @@ import schemas
 from database import engine, get_db, DATABASE_URL
 from auth import (
     hash_password, verify_password, generate_code,
-    generate_token, code_expiry,
+    generate_token, verify_token, code_expiry,
 )
 from mailer import send_code_email
 
@@ -20,6 +20,18 @@ print(f"[STARTUP] DATABASE_URL set: {bool(DATABASE_URL and 'neon' in DATABASE_UR
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Tests API")
+
+
+def get_current_user(authorization: str = Header(None), db: Session = Depends(get_db)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Не авторизован")
+    payload = verify_token(authorization[7:])
+    if not payload:
+        raise HTTPException(status_code=401, detail="Токен истёк или недействителен")
+    user = db.query(models.User).filter(models.User.login == payload["login"]).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Пользователь не найден")
+    return user
 
 app.add_middleware(
     CORSMiddleware,
@@ -40,6 +52,7 @@ def _to_out(test: models.Test) -> dict:
         "shareCode": test.share_code,
         "timeLimit": test.time_limit or 0,
         "shuffleQuestions": test.shuffle_questions or False,
+        "folder": test.folder or "",
         "submissions": [
             {
                 "id": s.id,
@@ -103,6 +116,7 @@ def create_test(data: schemas.TestCreate, db: Session = Depends(get_db)):
         share_code=code,
         time_limit=data.time_limit,
         shuffle_questions=data.shuffle_questions,
+        folder=data.folder,
     )
     db.add(test)
     db.commit()
@@ -131,6 +145,7 @@ def update_test(test_id: int, data: schemas.TestCreate, db: Session = Depends(ge
     test.questions = data.questions
     test.time_limit = data.time_limit
     test.shuffle_questions = data.shuffle_questions
+    test.folder = data.folder
     db.commit()
     db.refresh(test)
     return _to_out(test)
@@ -252,7 +267,7 @@ def register_confirm(data: schemas.CodeConfirm, db: Session = Depends(get_db)):
     ).delete()
     db.commit()
 
-    token = generate_token()
+    token = generate_token(user.login, user.email)
     return {"token": token, "login": user.login, "email": user.email}
 
 
@@ -269,7 +284,7 @@ def login(data: schemas.LoginInput, db: Session = Depends(get_db)):
     if not user.is_verified:
         raise HTTPException(status_code=400, detail="Почта не подтверждена")
 
-    token = generate_token()
+    token = generate_token(user.login, user.email)
     return {"token": token, "login": user.login, "email": user.email}
 
 
@@ -320,7 +335,7 @@ def reset_confirm(data: schemas.ResetConfirm, db: Session = Depends(get_db)):
     ).delete()
     db.commit()
 
-    token = generate_token()
+    token = generate_token(user.login, user.email)
     return {"token": token, "login": user.login, "email": user.email}
 
 

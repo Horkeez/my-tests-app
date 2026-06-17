@@ -15,6 +15,7 @@ class Test(Base):
     share_code = Column(String, unique=True, index=True)
     time_limit = Column(Integer, default=0)
     shuffle_questions = Column(Boolean, default=False)
+    folder = Column(String, default="")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     submissions = relationship(
