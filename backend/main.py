@@ -6,13 +6,16 @@ from sqlalchemy.orm import Session
 
 import models
 import schemas
-from database import engine, get_db
+from database import engine, get_db, DATABASE_URL
 from auth import (
     hash_password, verify_password, generate_code,
     generate_token, code_expiry,
 )
 from mailer import send_code_email
 
+_db_type = "postgresql" if "postgresql" in DATABASE_URL or "postgres" in DATABASE_URL else "sqlite"
+print(f"[STARTUP] Database type: {_db_type}")
+print(f"[STARTUP] DATABASE_URL set: {bool(DATABASE_URL and 'neon' in DATABASE_URL)}")
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -54,6 +57,23 @@ def _to_out(test: models.Test) -> dict:
 @app.get("/")
 def root():
     return {"status": "ok"}
+
+
+@app.get("/db-check")
+def db_check(db: Session = Depends(get_db)):
+    try:
+        result = db.execute(models.sa_text("SELECT 1")).fetchone()
+        user_count = db.query(models.User).count()
+        test_count = db.query(models.Test).count()
+        return {
+            "db_type": _db_type,
+            "neon_connected": "neon" in DATABASE_URL,
+            "connection": "ok" if result else "fail",
+            "users": user_count,
+            "tests": test_count,
+        }
+    except Exception as e:
+        return {"db_type": _db_type, "error": str(e)}
 
 
 @app.get("/tests")
