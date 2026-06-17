@@ -1232,7 +1232,7 @@ function TestTaking({ test, onCancel, onSubmit }) {
           </button>
           <span className="font-bold text-gray-800 truncate px-2">{test.title}</span>
           {timeLeft !== null ? (
-            <span className={`text-sm font-mono font-bold flex items-center gap-1 ${timeLeft <= 60 ? 'text-red-600 animate-pulse' : timeLeft <= 300 ? 'text-amber-600' : 'text-gray-600'}`}>
+            <span className={`text-sm font-mono font-bold flex items-center gap-1 ${timeLeft <= 60 ? 'text-red-600' : timeLeft <= 300 ? 'text-amber-600' : 'text-gray-600'}`}>
               <Clock className="w-4 h-4" /> {formatTime(timeLeft)}
             </span>
           ) : (
