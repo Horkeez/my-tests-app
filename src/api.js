@@ -1,9 +1,9 @@
 // Адрес бэкенда.
 // Локально (npm run dev) — используется localhost.
-// В интернете — поддомен api.take-test.ru
+// В продакшене — через /api/ на том же домене (Nginx проксирует)
 const API_URL = import.meta.env.DEV
     ? "http://127.0.0.1:8000"
-    : "https://api.take-test.ru";
+    : "/api";
 
 function authHeaders() {
     const token = localStorage.getItem('token');
