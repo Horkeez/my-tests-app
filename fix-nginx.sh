@@ -1,8 +1,14 @@
 #!/bin/bash
+echo "=== Cleaning all nginx configs ==="
+rm -f /etc/nginx/sites-enabled/*
+rm -f /etc/nginx/conf.d/*
+rm -f /etc/nginx/sites-available/take-test.ru*
+rm -f /etc/nginx/sites-available/default
+
 cat > /etc/nginx/sites-available/take-test.ru << 'NGINX'
 server {
-    listen 80;
-    server_name take-test.ru www.take-test.ru _;
+    listen 80 default_server;
+    server_name _;
 
     root /opt/my-tests-app/dist;
     index index.html;
@@ -19,6 +25,7 @@ server {
 }
 NGINX
 ln -sf /etc/nginx/sites-available/take-test.ru /etc/nginx/sites-enabled/take-test.ru
-rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl restart nginx
+curl -s http://localhost | head -5
+echo ""
 echo "NGINX OK"
