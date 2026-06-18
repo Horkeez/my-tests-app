@@ -4,7 +4,7 @@ git pull
 npm install
 npm run build
 systemctl restart testapp
-systemctl restart cloudflared
+systemctl restart nginx
 sleep 3
 curl -s http://127.0.0.1:8000/ && echo ""
 echo "DONE"
