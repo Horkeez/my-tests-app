@@ -1,4 +1,5 @@
 import os
+import re
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
@@ -6,6 +7,13 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./tests.db")
 
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+if ".neon.tech" in DATABASE_URL and "options=" not in DATABASE_URL:
+    match = re.search(r"@(ep-[^.]+?)(?:-pooler)?\.", DATABASE_URL)
+    if match:
+        endpoint_id = match.group(1)
+        sep = "&" if "?" in DATABASE_URL else "?"
+        DATABASE_URL += f"{sep}options=endpoint%3D{endpoint_id}"
 
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 
