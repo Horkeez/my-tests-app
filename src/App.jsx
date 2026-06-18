@@ -1938,6 +1938,9 @@ function AuthScreen({ onAuth }) {
     if (login.trim().length < 3) {
       setError('Логин минимум 3 символа'); return;
     }
+    if (login.trim().length > 30) {
+      setError('Логин не более 30 символов'); return;
+    }
     if (!/^[a-zA-Z0-9_]+$/.test(login.trim())) {
       setError('Логин может содержать только латинские буквы, цифры и знак _'); return;
     }

@@ -17,7 +17,12 @@ _db_type = "postgresql" if "postgresql" in DATABASE_URL or "postgres" in DATABAS
 print(f"[STARTUP] Database type: {_db_type}")
 print(f"[STARTUP] DATABASE_URL set: {bool(DATABASE_URL and 'neon' in DATABASE_URL)}")
 
-models.Base.metadata.create_all(bind=engine)
+try:
+    models.Base.metadata.create_all(bind=engine)
+    print("[STARTUP] Database tables OK")
+except Exception as e:
+    print(f"[STARTUP] WARNING: create_all failed: {e}")
+    print("[STARTUP] Server will start, but DB queries may fail until connection is restored")
 
 app = FastAPI(title="Tests API")
 
@@ -59,23 +64,6 @@ def _to_out(test: models.Test) -> dict:
 @app.get("/")
 def root():
     return {"status": "ok"}
-
-
-@app.get("/db-check")
-def db_check(db: Session = Depends(get_db)):
-    try:
-        result = db.execute(models.sa_text("SELECT 1")).fetchone()
-        user_count = db.query(models.User).count()
-        test_count = db.query(models.Test).count()
-        return {
-            "db_type": _db_type,
-            "neon_connected": "neon" in DATABASE_URL,
-            "connection": "ok" if result else "fail",
-            "users": user_count,
-            "tests": test_count,
-        }
-    except Exception as e:
-        return {"db_type": _db_type, "error": str(e)}
 
 
 @app.get("/tests")
