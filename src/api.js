@@ -1,9 +1,16 @@
 // Адрес бэкенда.
 // Локально (npm run dev) — используется localhost.
-// В интернете — поддомен api.take-test.ru
+// В продакшене — через /api/ на том же домене (Nginx проксирует)
 const API_URL = import.meta.env.DEV
     ? "http://127.0.0.1:8000"
-    : "https://api.take-test.ru";
+    : "/api";
+
+function authHeaders() {
+    const token = localStorage.getItem('token');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return headers;
+}
 
 // Извлекает читаемое сообщение из ответа API.
 // FastAPI/Pydantic v2 может вернуть detail как строку или массив объектов.
@@ -21,7 +28,7 @@ function extractError(errData, fallback) {
 
 // Получить все тесты пользователя
 export async function fetchTests(owner) {
-    const res = await fetch(`${API_URL}/tests?owner=${encodeURIComponent(owner)}`);
+    const res = await fetch(`${API_URL}/tests?owner=${encodeURIComponent(owner)}`, { headers: authHeaders() });
     if (!res.ok) throw new Error("Не удалось загрузить тесты");
     return res.json();
 }
@@ -37,7 +44,7 @@ export async function fetchTestByCode(code) {
 export async function createTest(test) {
     const res = await fetch(`${API_URL}/tests`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({
             owner: test.owner,
             title: test.title,
@@ -45,6 +52,7 @@ export async function createTest(test) {
             questions: test.questions,
             time_limit: test.timeLimit || 0,
             shuffle_questions: test.shuffleQuestions || false,
+            folder: test.folder || "",
         }),
     });
     if (!res.ok) throw new Error("Не удалось создать тест");
@@ -53,7 +61,7 @@ export async function createTest(test) {
 
 // Удалить тест
 export async function deleteTest(testId) {
-    const res = await fetch(`${API_URL}/tests/${testId}`, { method: "DELETE" });
+    const res = await fetch(`${API_URL}/tests/${testId}`, { method: "DELETE", headers: authHeaders() });
     if (!res.ok) throw new Error("Не удалось удалить тест");
     return res.json();
 }
@@ -62,7 +70,7 @@ export async function deleteTest(testId) {
 export async function updateTest(testId, test) {
     const res = await fetch(`${API_URL}/tests/${testId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({
             owner: test.owner,
             title: test.title,
@@ -70,6 +78,7 @@ export async function updateTest(testId, test) {
             questions: test.questions,
             time_limit: test.timeLimit || 0,
             shuffle_questions: test.shuffleQuestions || false,
+            folder: test.folder || "",
         }),
     });
     if (!res.ok) throw new Error("Не удалось обновить тест");
@@ -81,7 +90,7 @@ export async function updateTest(testId, test) {
 export async function submitTest(testId, submission) {
     const res = await fetch(`${API_URL}/tests/${testId}/submissions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify(submission),
     });
     if (!res.ok) throw new Error("Не удалось отправить ответы");
@@ -93,6 +102,7 @@ export async function submitTest(testId, submission) {
 export async function deleteSubmission(testId, subId) {
     const res = await fetch(`${API_URL}/tests/${testId}/submissions/${subId}`, {
         method: "DELETE",
+        headers: authHeaders(),
     });
     if (!res.ok) throw new Error("Не удалось удалить результат");
     return res.json();

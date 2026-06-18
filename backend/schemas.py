@@ -27,6 +27,7 @@ class TestCreate(BaseModel):
     questions: Any
     time_limit: int = 0
     shuffle_questions: bool = False
+    folder: str = ""
 
 
 class TestOut(BaseModel):
@@ -38,6 +39,7 @@ class TestOut(BaseModel):
     shareCode: str
     timeLimit: int = 0
     shuffleQuestions: bool = False
+    folder: str = ""
     submissions: List[SubmissionOut] = []
 
     class Config:
