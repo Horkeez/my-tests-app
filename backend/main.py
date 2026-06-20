@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import FastAPI, Depends, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -95,6 +95,22 @@ def get_test_by_code(code: str, db: Session = Depends(get_db)):
 
 @app.post("/tests")
 def create_test(data: schemas.TestCreate, db: Session = Depends(get_db)):
+    # Защита от дублей при двойном/тройном клике или повторной отправке запроса.
+    # Если этот же пользователь только что (за последние 15 сек) создал тест
+    # с таким же названием — возвращаем уже созданный, а не плодим копии.
+    recent = (
+        db.query(models.Test)
+        .filter(
+            models.Test.owner == data.owner,
+            models.Test.title == data.title,
+            models.Test.created_at >= datetime.utcnow() - timedelta(seconds=15),
+        )
+        .order_by(models.Test.id.desc())
+        .first()
+    )
+    if recent:
+        return _to_out(recent)
+
     code = secrets.token_hex(3).upper()
     test = models.Test(
         owner=data.owner,
@@ -148,6 +164,20 @@ def add_submission(
     test = db.query(models.Test).filter(models.Test.id == test_id).first()
     if not test:
         raise HTTPException(status_code=404, detail="Тест не найден")
+
+    # Защита от дублей: тот же участник с тем же временем отправки в этом тесте
+    # (двойной тап по «Отправить ответы») — не создаём вторую запись.
+    duplicate = (
+        db.query(models.Submission)
+        .filter(
+            models.Submission.test_id == test_id,
+            models.Submission.name == data.name,
+            models.Submission.at == data.at,
+        )
+        .first()
+    )
+    if duplicate:
+        return _to_out(test)
 
     sub = models.Submission(
         test_id=test_id,

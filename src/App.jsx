@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   User, Plus, FileText, BarChart3, ClipboardList, Trash2,
   ChevronLeft, Image as ImageIcon, Check, X, CircleDot,
@@ -519,6 +519,22 @@ function MenuCard({ icon, color, title, subtitle, onClick }) {
 function TestListItem({ test, onTake, onResults, onEdit, onDelete, onShare, onDuplicate }) {
   const meta = TYPE_LABELS[test.type];
   const Icon = meta.icon;
+  const [busy, setBusy] = useState(false);
+  // Замок от повторных нажатий на «Дублировать»/«Удалить»
+  const busyRef = useRef(false);
+
+  const guard = (fn) => async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      await fn();
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
       <div className="flex items-start justify-between">
@@ -532,7 +548,7 @@ function TestListItem({ test, onTake, onResults, onEdit, onDelete, onShare, onDu
             {test.timeLimit > 0 && ` · ${test.timeLimit} мин.`}
           </p>
         </div>
-        <button onClick={onDelete} className="text-gray-300 hover:text-red-500 p-1">
+        <button onClick={guard(onDelete)} disabled={busy} className="text-gray-300 hover:text-red-500 disabled:opacity-40 p-1">
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
@@ -564,10 +580,11 @@ function TestListItem({ test, onTake, onResults, onEdit, onDelete, onShare, onDu
           <Share2 className="w-4 h-4" /> Поделиться
         </button>
         <button
-          onClick={onDuplicate}
-          className="flex-1 flex items-center justify-center gap-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-medium py-2 rounded-lg"
+          onClick={guard(onDuplicate)}
+          disabled={busy}
+          className="flex-1 flex items-center justify-center gap-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-medium py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Copy className="w-4 h-4" /> Дублировать
+          <Copy className="w-4 h-4" /> {busy ? '...' : 'Дублировать'}
         </button>
       </div>
     </div>
@@ -585,6 +602,10 @@ function TestCreator({ username, editingTest, onCancel, onSave }) {
   const [folder, setFolder] = useState(editingTest ? (editingTest.folder || '') : '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  // Синхронный «замок» — защищает от 2-3-4 быстрых нажатий подряд.
+  // useState обновляется асинхронно, поэтому несколько кликов в одном кадре
+  // успевают увидеть saving === false. Ref меняется мгновенно и блокирует их.
+  const savingRef = useRef(false);
 
 
   const addQuestion = (format) => {
@@ -789,6 +810,9 @@ function TestCreator({ username, editingTest, onCancel, onSave }) {
   };
 
   const handleSave = () => {
+    // Если сохранение уже идёт — игнорируем повторные нажатия
+    if (savingRef.current) return;
+
     const problem = validateTest();
     if (problem) {
       setError(problem);
@@ -797,19 +821,27 @@ function TestCreator({ username, editingTest, onCancel, onSave }) {
       return;
     }
     setError('');
+    savingRef.current = true;
     setSaving(true);
-    onSave({
-      id: Date.now(),
-      owner: username,
-      title: title.trim(),
-      type,
-      questions,
-      timeLimit,
-      shuffleQuestions,
-      folder,
-      submissions: [],
-      shareCode: Math.random().toString(36).slice(2, 8).toUpperCase(),
-    }).finally(() => setSaving(false));
+    Promise.resolve(
+      onSave({
+        id: Date.now(),
+        owner: username,
+        title: title.trim(),
+        type,
+        questions,
+        timeLimit,
+        shuffleQuestions,
+        folder,
+        submissions: [],
+        shareCode: Math.random().toString(36).slice(2, 8).toUpperCase(),
+      })
+    ).finally(() => {
+      // При успехе компонент уже размонтирован (ушли на «Мои тесты»),
+      // при ошибке — снимаем замок, чтобы можно было повторить.
+      savingRef.current = false;
+      setSaving(false);
+    });
   };
 
 
@@ -1228,6 +1260,9 @@ function TestTaking({ test, onCancel, onSubmit }) {
   const [answers, setAnswers] = useState({});
   const [timeLeft, setTimeLeft] = useState(null);
   const [requiredError, setRequiredError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  // Синхронный замок от двойной отправки ответов (двойной/тройной тап)
+  const submittingRef = useRef(false);
 
   const [displayQuestions] = useState(() => {
     const qs = [...test.questions];
@@ -1326,6 +1361,9 @@ function TestTaking({ test, onCancel, onSubmit }) {
   }
 
   const doSubmit = (force = false) => {
+    // Уже отправляем — игнорируем повторные нажатия
+    if (submittingRef.current) return;
+
     if (!force) {
       const unanswered = displayQuestions.filter((q) => {
         if (!q.required) return false;
@@ -1396,15 +1434,26 @@ function TestTaking({ test, onCancel, onSubmit }) {
       return { qid: q.id, selected: a.selected || [], text: a.text || '', correct, matches: {} };
     });
 
-    onSubmit({
-      id: Date.now(),
-      name: name.trim(),
-      score,
-      total: test.questions.length,
-      answered,
-      skipped: test.questions.length - answered,
-      detailed,
-      at: new Date().toLocaleString('ru-RU'),
+    // Ставим замок ровно перед отправкой — до этого момента валидация
+    // могла прерваться (обязательные вопросы), и кнопка должна остаться активной.
+    submittingRef.current = true;
+    setSubmitting(true);
+    Promise.resolve(
+      onSubmit({
+        id: Date.now(),
+        name: name.trim(),
+        score,
+        total: test.questions.length,
+        answered,
+        skipped: test.questions.length - answered,
+        detailed,
+        at: new Date().toLocaleString('ru-RU'),
+      })
+    ).finally(() => {
+      // При успехе уйдём на экран результатов (размонтируемся),
+      // при ошибке — снимаем замок для повторной попытки.
+      submittingRef.current = false;
+      setSubmitting(false);
     });
   };
 
@@ -1518,9 +1567,10 @@ function TestTaking({ test, onCancel, onSubmit }) {
         <div className="max-w-md mx-auto">
           <button
             onClick={() => doSubmit(false)}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 rounded-lg flex items-center justify-center gap-2"
+            disabled={submitting}
+            className={`w-full text-white font-medium py-3 rounded-lg flex items-center justify-center gap-2 transition ${submitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}
           >
-            <Send className="w-4 h-4" /> Отправить ответы
+            <Send className="w-4 h-4" /> {submitting ? 'Отправка...' : 'Отправить ответы'}
           </button>
         </div>
       </div>
