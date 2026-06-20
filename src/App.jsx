@@ -105,7 +105,9 @@ export default function TestApp() {
       setTests(data);
     } catch (e) {
       console.error(e);
-      alert('Не удалось загрузить тесты. Запущен ли сервер?');
+      if (tests.length === 0) {
+        alert('Не удалось загрузить тесты. Проверьте соединение и попробуйте обновить страницу.');
+      }
     } finally {
       setLoading(false);
     }
@@ -582,6 +584,7 @@ function TestCreator({ username, editingTest, onCancel, onSave }) {
   const [shuffleQuestions, setShuffleQuestions] = useState(editingTest ? (editingTest.shuffleQuestions || false) : false);
   const [folder, setFolder] = useState(editingTest ? (editingTest.folder || '') : '');
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
 
   const addQuestion = (format) => {
@@ -794,6 +797,7 @@ function TestCreator({ username, editingTest, onCancel, onSave }) {
       return;
     }
     setError('');
+    setSaving(true);
     onSave({
       id: Date.now(),
       owner: username,
@@ -805,7 +809,7 @@ function TestCreator({ username, editingTest, onCancel, onSave }) {
       folder,
       submissions: [],
       shareCode: Math.random().toString(36).slice(2, 8).toUpperCase(),
-    });
+    }).finally(() => setSaving(false));
   };
 
 
@@ -955,9 +959,10 @@ function TestCreator({ username, editingTest, onCancel, onSave }) {
         <div className="max-w-md mx-auto">
           <button
             onClick={handleSave}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 rounded-lg transition"
+            disabled={saving}
+            className={`w-full font-medium py-3 rounded-lg transition ${saving ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'} text-white`}
           >
-            Сохранить тест {questions.length > 0 && `(${questions.length} вопр.)`}
+            {saving ? 'Сохранение...' : `Сохранить тест ${questions.length > 0 ? `(${questions.length} вопр.)` : ''}`}
           </button>
         </div>
       </div>
