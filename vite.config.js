@@ -15,7 +15,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/api\.take-test\.ru\/tests/,
+            urlPattern: /\/api\/tests/,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-tests-cache',
@@ -40,10 +40,13 @@ export default defineConfig({
         short_name: 'Тесты',
         description: 'Создавайте тесты, опросы и анкеты',
         theme_color: '#4f46e5',
-        background_color: '#ffffff',
+        background_color: '#4f46e5',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
+        id: '/',
+        lang: 'ru',
+        categories: ['education', 'productivity'],
         icons: [
           {
             src: 'icon-192.png',
@@ -59,7 +62,21 @@ export default defineConfig({
             src: 'icon-512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable',
+            purpose: 'maskable',
+          },
+          {
+            src: 'apple-touch-icon.png',
+            sizes: '180x180',
+            type: 'image/png',
+          },
+        ],
+        screenshots: [
+          {
+            src: 'icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            form_factor: 'narrow',
+            label: 'Главный экран',
           },
         ],
       },
