@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ER-модель — take-test.online</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    min-height: 100vh;
+    padding: 2rem;
+  }
+  h1 {
+    text-align: center;
+    font-size: 1.8rem;
+    margin-bottom: 0.5rem;
+    color: #818cf8;
+  }
+  .subtitle {
+    text-align: center;
+    color: #94a3b8;
+    margin-bottom: 2rem;
+    font-size: 0.95rem;
+  }
+  .diagram-container {
+    background: #1e293b;
+    border-radius: 12px;
+    padding: 2rem;
+    max-width: 1100px;
+    margin: 0 auto 2rem;
+    border: 1px solid #334155;
+  }
+  .mermaid {
+    display: flex;
+    justify-content: center;
+  }
+  .mermaid svg {
+    max-width: 100%;
+  }
+  .tables {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.5rem;
+  }
+  .table-card {
+    background: #1e293b;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #334155;
+  }
+  .table-card h3 {
+    background: #334155;
+    padding: 0.75rem 1rem;
+    font-size: 1.1rem;
+    color: #a5b4fc;
+  }
+  .table-card table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .table-card th {
+    text-align: left;
+    padding: 0.5rem 1rem;
+    color: #94a3b8;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #334155;
+  }
+  .table-card td {
+    padding: 0.4rem 1rem;
+    border-bottom: 1px solid #1e293b;
+    font-size: 0.9rem;
+  }
+  .table-card tr:last-child td { border-bottom: none; }
+  .col-name { color: #e2e8f0; font-weight: 500; }
+  .col-type { color: #fbbf24; font-family: monospace; font-size: 0.85rem; }
+  .col-note { color: #94a3b8; font-size: 0.8rem; }
+  .badge {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    margin-left: 0.3rem;
+  }
+  .pk { background: #7c3aed33; color: #a78bfa; }
+  .fk { background: #05966933; color: #6ee7b7; }
+  .uq { background: #d9770633; color: #fbbf24; }
+  .idx { background: #0284c733; color: #67e8f9; }
+  .section-title {
+    max-width: 1100px;
+    margin: 2rem auto 1rem;
+    font-size: 1.3rem;
+    color: #818cf8;
+  }
+</style>
+</head>
+<body>
+
+<h1>ER-модель take-test.online</h1>
+<p class="subtitle">Логическая структура базы данных PostgreSQL</p>
+
+<div class="diagram-container">
+  <pre class="mermaid">
+erDiagram
+    users {
+        int id PK
+        string email UK
+        string login UK
+        string password_hash
+        boolean is_verified
+        datetime created_at
+    }
+
+    tests {
+        int id PK
+        string owner FK
+        string title
+        string type
+        json questions
+        string share_code UK
+        int time_limit
+        boolean shuffle_questions
+        string folder
+        datetime created_at
+    }
+
+    submissions {
+        int id PK
+        int test_id FK
+        string name
+        int score
+        int total
+        int answered
+        int skipped
+        json detailed
+        string at
+    }
+
+    email_codes {
+        int id PK
+        string email
+        string code
+        string purpose
+        datetime expires_at
+        datetime created_at
+    }
+
+    users ||--o{ tests : "creates"
+    tests ||--o{ submissions : "has"
+    users ||--o{ email_codes : "receives"
+  </pre>
+</div>
+
+<h2 class="section-title">Описание таблиц</h2>
+
+<div class="tables">
+
+  <div class="table-card">
+    <h3>users</h3>
+    <table>
+      <tr><th>Поле</th><th>Тип</th><th>Описание</th></tr>
+      <tr>
+        <td class="col-name">id <span class="badge pk">PK</span></td>
+        <td class="col-type">INTEGER</td>
+        <td class="col-note">Автоинкремент</td>
+      </tr>
+      <tr>
+        <td class="col-name">email <span class="badge uq">UQ</span> <span class="badge idx">IDX</span></td>
+        <td class="col-type">VARCHAR</td>
+        <td class="col-note">Email пользователя</td>
+      </tr>
+      <tr>
+        <td class="col-name">login <span class="badge uq">UQ</span> <span class="badge idx">IDX</span></td>
+        <td class="col-type">VARCHAR</td>
+        <td class="col-note">Логин (3-30, латиница+цифры+_)</td>
+      </tr>
+      <tr>
+        <td class="col-name">password_hash</td>
+        <td class="col-type">VARCHAR</td>
+        <td class="col-note">Хеш bcrypt</td>
+      </tr>
+      <tr>
+        <td class="col-name">is_verified</td>
+        <td class="col-type">BOOLEAN</td>
+        <td class="col-note">Подтверждена ли почта</td>
+      </tr>
+      <tr>
+        <td class="col-name">created_at</td>
+        <td class="col-type">DATETIME</td>
+        <td class="col-note">Дата регистрации</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="table-card">
+    <h3>tests</h3>
+    <table>
+      <tr><th>Поле</th><th>Тип</th><th>Описание</th></tr>
+      <tr>
+        <td class="col-name">id <span class="badge pk">PK</span></td>
+        <td class="col-type">INTEGER</td>
+        <td class="col-note">Автоинкремент</td>
+      </tr>
+      <tr>
+        <td class="col-name">owner <span class="badge fk">FK</span> <span class="badge idx">IDX</span></td>
+        <td class="col-type">VARCHAR</td>
+        <td class="col-note">Логин владельца (users.login)</td>
+      </tr>
+      <tr>
+        <td class="col-name">title</td>
+        <td class="col-type">VARCHAR</td>
+        <td class="col-note">Название теста</td>
+      </tr>
+      <tr>
+        <td class="col-name">type</td>
+        <td class="col-type">VARCHAR</td>
+        <td class="col-note">Тип: quiz / survey / analytics</td>
+      </tr>
+      <tr>
+        <td class="col-name">questions</td>
+        <td class="col-type">JSON</td>
+        <td class="col-note">Массив вопросов</td>
+      </tr>
+      <tr>
+        <td class="col-name">share_code <span class="badge uq">UQ</span> <span class="badge idx">IDX</span></td>
+        <td class="col-type">VARCHAR</td>
+        <td class="col-note">Уникальный код для шеринга</td>
+      </tr>
+      <tr>
+        <td class="col-name">time_limit</td>
+        <td class="col-type">INTEGER</td>
+        <td class="col-note">Лимит времени (0 = без лимита)</td>
+      </tr>
+      <tr>
+        <td class="col-name">shuffle_questions</td>
+        <td class="col-type">BOOLEAN</td>
+        <td class="col-note">Перемешивать вопросы</td>
+      </tr>
+      <tr>
+        <td class="col-name">folder</td>
+        <td class="col-type">VARCHAR</td>
+        <td class="col-note">Название папки</td>
+      </tr>
+      <tr>
+        <td class="col-name">created_at</td>
+        <td class="col-type">DATETIME</td>
+        <td class="col-note">Дата создания</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="table-card">
+    <h3>submissions</h3>
+    <table>
+      <tr><th>Поле</th><th>Тип</th><th>Описание</th></tr>
+      <tr>
+        <td class="col-name">id <span class="badge pk">PK</span></td>
+        <td class="col-type">INTEGER</td>
+        <td class="col-note">Автоинкремент</td>
+      </tr>
+      <tr>
+        <td class="col-name">test_id <span class="badge fk">FK</span></td>
+        <td class="col-type">INTEGER</td>
+        <td class="col-note">Ссылка на tests.id</td>
+      </tr>
+      <tr>
+        <td class="col-name">name</td>
+        <td class="col-type">VARCHAR</td>
+        <td class="col-note">Имя респондента</td>
+      </tr>
+      <tr>
+        <td class="col-name">score</td>
+        <td class="col-type">INTEGER</td>
+        <td class="col-note">Набранные баллы</td>
+      </tr>
+      <tr>
+        <td class="col-name">total</td>
+        <td class="col-type">INTEGER</td>
+        <td class="col-note">Максимум баллов</td>
+      </tr>
+      <tr>
+        <td class="col-name">answered</td>
+        <td class="col-type">INTEGER</td>
+        <td class="col-note">Отвеченных вопросов</td>
+      </tr>
+      <tr>
+        <td class="col-name">skipped</td>
+        <td class="col-type">INTEGER</td>
+        <td class="col-note">Пропущенных вопросов</td>
+      </tr>
+      <tr>
+        <td class="col-name">detailed</td>
+        <td class="col-type">JSON</td>
+        <td class="col-note">Детальные ответы</td>
+      </tr>
+      <tr>
+        <td class="col-name">at</td>
+        <td class="col-type">VARCHAR</td>
+        <td class="col-note">Дата/время прохождения</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="table-card">
+    <h3>email_codes</h3>
+    <table>
+      <tr><th>Поле</th><th>Тип</th><th>Описание</th></tr>
+      <tr>
+        <td class="col-name">id <span class="badge pk">PK</span></td>
+        <td class="col-type">INTEGER</td>
+        <td class="col-note">Автоинкремент</td>
+      </tr>
+      <tr>
+        <td class="col-name">email <span class="badge idx">IDX</span></td>
+        <td class="col-type">VARCHAR</td>
+        <td class="col-note">Email получателя</td>
+      </tr>
+      <tr>
+        <td class="col-name">code</td>
+        <td class="col-type">VARCHAR</td>
+        <td class="col-note">6-значный код</td>
+      </tr>
+      <tr>
+        <td class="col-name">purpose</td>
+        <td class="col-type">VARCHAR</td>
+        <td class="col-note">register / reset</td>
+      </tr>
+      <tr>
+        <td class="col-name">expires_at</td>
+        <td class="col-type">DATETIME</td>
+        <td class="col-note">Срок действия (10 мин)</td>
+      </tr>
+      <tr>
+        <td class="col-name">created_at</td>
+        <td class="col-type">DATETIME</td>
+        <td class="col-note">Дата создания</td>
+      </tr>
+    </table>
+  </div>
+
+</div>
+
+<script>
+  mermaid.initialize({
+    theme: 'dark',
+    themeVariables: {
+      primaryColor: '#818cf8',
+      primaryTextColor: '#e2e8f0',
+      lineColor: '#64748b',
+      background: '#1e293b',
+    }
+  });
+</script>
+
+</body>
+</html>
